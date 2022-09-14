@@ -8,7 +8,7 @@ load_dotenv()
 apikey = os.getenv('ALCH_KEY')
 url = 'https://arb-mainnet.g.alchemy.com/v2/'+apikey
 
-blockhex = Web3.toHex(22473802)
+blockhex = Web3.toHex(24421014)
 increasepostopic = '0x2fe68525253654c21998f35787a8d0f361905ef647c854092430ab65f2f15022'
 decreasepostopic = '0x93d75d64d1f84fc6f430a64fc578bdd4c1e090e90ea2d51773e626d19de56d30'
 tokenlist = {
@@ -23,11 +23,11 @@ payload = {
     "method": "eth_getLogs",
     "params": [
         {
-            #"fromBlock": str(blockhex),
-            #"toBlock": "latest",
+            "fromBlock": Web3.toHex(24421028),
+            "toBlock": Web3.toHex(24421028),
             #"fromAddress": "0x3D6bA331e3D9702C5e8A8d254e5d8a285F223aba",
             "Address":"0x489ee077994B6658eAfA855C308275EAd8097C4A",
-            "blockHash":"0x0a063d41a043c0395f3b29dbf5eaf74f08a2eb609bd88ea0530d97dc18f3c8b5"
+            #"blockHash":"0x0a063d41a043c0395f3b29dbf5eaf74f08a2eb609bd88ea0530d97dc18f3c8b5"
             #"contractAddresses": ["0x3D6bA331e3D9702C5e8A8d254e5d8a285F223aba"],
             #"category": ["external"],
             #"order": "asc",
@@ -54,10 +54,11 @@ datatypes = ['Key','AccAddress','Collateral','Index','CollatDelta','SizeDelta','
 
 #print(dict['result'][0]['address'])
 for tx in respdict['result']:
-#    print(tx['address'])
+#    print(Web3.toInt(hexstr=tx['blockNumber']))
     for txtopic in tx['topics']:
         if tx['topics'][0] != increasepostopic and tx['topics'][0] != decreasepostopic:
             break
+        print(tx['transactionHash'])
         if tx['topics'][0] == increasepostopic:
             print('Position increasing')
         else:
