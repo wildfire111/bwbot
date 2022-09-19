@@ -11,8 +11,7 @@ apikey = os.getenv('ALCH_KEY')
 url = 'https://arb-mainnet.g.alchemy.com/v2/'+apikey
 targetaddress = os.getenv('OWNER')
 
-print('starting')
-
+print('starting nowwww')
 con = sqlite3.connect('transactions.db')
 cur = con.cursor()
 #MAKE SURE YOU DELETE THIS BEFORE YOU GO LIVE LOL
