@@ -13,8 +13,6 @@ targetaddress = os.getenv('OWNER')
 
 con = sqlite3.connect('transactions.db')
 cur = con.cursor()
-connames = sqlite3.connect('names.db')
-curnames = connames.cursor()
 #MAKE SURE YOU DELETE THIS BEFORE YOU GO LIVE LOL
 try:
     cur.execute('DROP TABLE tracker')
@@ -85,12 +83,6 @@ while True:
     respdict = response.json()
     datatypes = ['Key','AccAddress','Collateral','Index','CollatDelta','SizeDelta','IsLong','Price','Fee']
 
-    curnames.execute('SELECT usernames FROM listnames ORDER BY RANDOM() LIMIT 3000')
-    newnames = list(cur.fetchall())
-    for i in range(len(newnames)):
-        if ' ' in newnames[i][0]:
-            newnames.pop(i)
-
 
 
     for tx in respdict['result']:
@@ -144,13 +136,6 @@ while True:
             response = requests.post(url, json=payload, headers=headers)
             respdict = response.json()
             timestamp = Web3.toInt(hexstr=respdict['result']['timestamp'])
-            if (parseddata['AccAddress'],) not in currentusers:
-                name = newnames.pop(0)
-                cur.execute('INSERT INTO usernames VALUES (?,?)', (parseddata['AccAddress'],name))
-                con.commit()
-                curnames.execute(f'DELETE FROM names WHERE name="{name}"')
-                connames.commit()
-                currentusers.append((parseddata['AccAddress'],))
             cur.execute('INSERT INTO tracker VALUES (?)', (Web3.toInt(hexstr=tx['blockNumber'])))
             cur.execute('INSERT INTO transactions VALUES (?,?,?,?,?,?,?,?)', (
                 parseddata['AccAddress'],
