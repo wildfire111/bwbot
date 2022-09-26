@@ -11,28 +11,17 @@ apikey = os.getenv('ALCH_KEY')
 url = 'https://arb-mainnet.g.alchemy.com/v2/'+apikey
 targetaddress = os.getenv('OWNER')
 
-def gettimestamp(blockid):
-    payload = {"jsonrpc":"2.0","id":0,"method":"eth_getBlockByNumber","params":[Web3.toHex(blockid),False]}
-    headers = {"Accept": "application/json","Content-Type": "application/json"}
-    response = requests.post(url, json=payload, headers=headers)
-    if response.ok != True:
-        print('No dice.')
-        print(response.json())
-        return
-    respdict = response.json()
-    timestamphex = respdict['result']['timestamp']
-    return(Web3.toInt(hexstr=timestamphex))
+print('Running.')
 
-print('starting nowwww')
 con = sqlite3.connect('transactions.db')
 cur = con.cursor()
+
 #MAKE SURE YOU DELETE THIS BEFORE YOU GO LIVE LOL
 try:
-    cur.execute('DROP TABLE tracker')
-    cur.execute('DROP TABLE transactions')
-    cur.execute('DROP TABLE usernames')
+    cur.execute('DROP TABLE IF EXISTS tracker, transactions')
 except:
-    print("tables can't be dropped")
+    print("Tables don't exist, can't be dropped.")
+
 try:
     cur.execute('SELECT recordedblock FROM tracker')
 except:
@@ -49,12 +38,16 @@ except:
         Block Int,
         Timestamp Int
     )''')
-    cur.execute('CREATE TABLE usernames (AccAddress String, Name String)')
-cur.execute('SELECT AccAddress from usernames WHERE name NOT NULL')
-currentusers = list(cur.fetchall())
+#    cur.execute('CREATE TABLE usernames (AccAddress String, Name String)')
+
+#cur.execute('SELECT AccAddress from usernames WHERE name NOT NULL')
+#currentusers = list(cur.fetchall())
 
 increasepostopic = '0x2fe68525253654c21998f35787a8d0f361905ef647c854092430ab65f2f15022'
 decreasepostopic = '0x93d75d64d1f84fc6f430a64fc578bdd4c1e090e90ea2d51773e626d19de56d30'
+startblock = 24421028
+topiclist = ['0x2fe68525253654c21998f35787a8d0f361905ef647c854092430ab65f2f15022','0x93d75d64d1f84fc6f430a64fc578bdd4c1e090e90ea2d51773e626d19de56d30']
+
 
 tokenlist = {
     'wbtc':'0x2f2a2543b76a4166549f7aab2e75bef0aefc5b0f',
@@ -64,10 +57,9 @@ tokenlist = {
     'link':'0xf97f4df75117a78c1a5a0dbb814af92458539fb4',
     'usdt':'0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9',
     'dai':'0xda10009cbd5d07dd0cecc66161fc93d7c9000da1',
-    'fxs':'0x9d2f299715d94d8a7e6f5eaa8e654e8c74a988a7'
+    'fxs':'0x9d2f299715d94d8a7e6f5eaa8e654e8c74a988a7',
+    'frax':'0x17fc002b466eec40dae837fc4be5c67993ddbd6f'
     }
-
-startblock = 24421028
 
 #getting current block
 payload = {"jsonrpc": "2.0", "id": 0, "method": "eth_blockNumber"}
@@ -77,64 +69,71 @@ respdict = response.json()
 curblock = Web3.toInt(hexstr=respdict['result'])
 print(f"Current block: {curblock}")
 
-pbar = tqdm(total=(curblock-startblock))
-while True:
-    pbar.update(2000)
-    if startblock >= curblock:
-        break
-    targetblock = startblock + 2000
-    if targetblock >= curblock:
-        targetblock = curblock
-    payload = {
-        "id": 1,
-        "jsonrpc": "2.0",
-        "method": "eth_getLogs",
-        "params": [
-            {
-                "fromBlock": Web3.toHex(startblock),
-                "toBlock": Web3.toHex(targetblock),
-                "Address":"0x489ee077994B6658eAfA855C308275EAd8097C4A",
+multiplier = 1
+datatypes = ['Key','AccAddress','Collateral','Index','CollatDelta','SizeDelta','IsLong','Price','Fee']
+
+for txtopic in topiclist:
+    if txtopic == '0x2fe68525253654c21998f35787a8d0f361905ef647c854092430ab65f2f15022':
+        print('Extracting increases.')
+        multiplier = 1
+    else:
+        print('Extracting decreases.')
+        multiplier = -1
+    pbar = tqdm(total=(curblock-startblock))
+    while startblock < curblock:
+        targetblock = startblock + 20000
+        if targetblock > curblock:
+            targetblock = curblock
+        payload = {
+            "jsonrpc": "2.0",
+            "id": 0,
+            "method": "eth_getLogs",
+            "params": [
+                {
+                "fromBlock": "0x174a2a4",
+                "toBlock": "0x177afe4",
+                "address": "0x489ee077994B6658eAfA855C308275EAd8097C4A",
+                "topics": [
+                    txtopic
+                    ]
+                }
+            ]
+        }
+        response = requests.post(url, json=payload, headers=headers)
+        if response.ok == False:
+            targetblock = targetblock - 18000
+            payload = {
+                "jsonrpc": "2.0",
+                "id": 0,
+                "method": "eth_getLogs",
+                "params": [
+                    {
+                    "fromBlock": "0x174a2a4",
+                    "toBlock": "0x177afe4",
+                    "address": "0x489ee077994B6658eAfA855C308275EAd8097C4A",
+                    "topics": [
+                        txtopic
+                        ]
+                    }
+                ]
             }
-        ]
-    }
-    startblock = targetblock + 1
-    response = requests.post(url, json=payload, headers=headers)
-    respdict = response.json()
-    datatypes = ['Key','AccAddress','Collateral','Index','CollatDelta','SizeDelta','IsLong','Price','Fee']
-
-
-
-    for tx in respdict['result']:
-    #    print(Web3.toInt(hexstr=tx['blockNumber']))
-        for txtopic in tx['topics']:
-            if tx['topics'][0] != increasepostopic and tx['topics'][0] != decreasepostopic:
+            response = requests.post(url, json=payload, headers=headers)
+            if response.ok == False:
+                print('Something went wrong with requesting transactions')
                 break
-            #print(tx['transactionHash'])
-            if tx['topics'][0] == decreasepostopic:
-                multiplier = -1
-            else:
-                multiplier = 1
+        respdict = response.json()
+        startblock = targetblock + 1
+        executetext = 'INSERT INTO transactions VALUES '
+        for tx in respdict['result']:
             txdata = tx['data']
             txdata = txdata[2:]
-            txdatalist = list()
-            if len(txdata)%64 != 0:
-                print('Error in data')
-                break
             parseddata = dict()
-            for i in range(int(len(txdata)/64)):
-                txdatalist.append(txdata[0:64])
-                if len(txdata) != 0:
-                    txdata = txdata[64:]
-            for i in range(len(txdatalist)):
-                parseddata[datatypes[i]] = txdatalist[i]
+            for type in datatypes:
+                parseddata[type] = txdata[0:64]
+                txdata = txdata[64:]
             parseddata['AccAddress'] = (Web3.toHex(hexstr=parseddata['AccAddress'][24:]))
-#ONLY SELECTING MY TXS
-            if parseddata['AccAddress'].upper() != str(targetaddress).upper():
-            #    print('No account match')
-                break
             parseddata['Collateral'] = (Web3.toHex(hexstr=parseddata['Collateral'][24:]))
             parseddata['Index'] = (Web3.toHex(hexstr=parseddata['Index'][24:]))
-            #print(Web3.toInt(hexstr=parseddata['Price']))
             parseddata['Price'] = Web3.toInt(hexstr=parseddata['Price'])/(10**30)
             parseddata['CollatDelta'] = Web3.toInt(hexstr=parseddata['CollatDelta'])/(10**30)*multiplier
             parseddata['SizeDelta'] = Web3.toInt(hexstr=parseddata['SizeDelta'])/(10**30)*multiplier
@@ -153,8 +152,7 @@ while True:
                 parseddata['IsLong'] = True
             else:
                 parseddata['IsLong'] = False
-            cur.execute('UPDATE tracker SET recordedblock = ?', (Web3.toInt(hexstr=tx['blockNumber']),))
-            cur.execute('INSERT INTO transactions VALUES (?,?,?,?,?,?,?,?,?,?)', (
+            cur.execute('INSERT INTO transactions VALUES (?,?,?,?,?,?,?,?,?,NULL)', (
                 parseddata['AccAddress'],
                 parseddata['Collateral'],
                 parseddata['Index'],
@@ -164,16 +162,7 @@ while True:
                 parseddata['Fee'],
                 parseddata['IsLong'],
                 Web3.toInt(hexstr=tx['blockNumber']),
-                gettimestamp(Web3.toInt(hexstr=tx['blockNumber']))))
+                ))
+        pbar.update(20000)
+        con.commit()
 
-            #for key,value in parseddata.items():
-            #    print(f"{key} - {value}")
-            #print('Block: '+str(Web3.toInt(hexstr=tx['blockNumber'])))
-    con.commit()
-con.close()
-
-
-
-
-#pretty = json.dumps(response.json(), indent=4)
-#print(pretty)
