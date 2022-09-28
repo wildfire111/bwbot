@@ -18,7 +18,9 @@ cur = con.cursor()
 
 #MAKE SURE YOU DELETE THIS BEFORE YOU GO LIVE LOL
 try:
-    cur.execute('DROP TABLE IF EXISTS tracker, transactions')
+    cur.execute('DROP TABLE tracker')
+    cur.execute('DROP TABLE transactions')
+    con.commit()
 except:
     print("Tables don't exist, can't be dropped.")
 
@@ -36,7 +38,7 @@ except:
         Fee Decimal(38,38),
         IsLong Bool,
         Block Int,
-        Timestamp Int
+        TxHash String
     )''')
 #    cur.execute('CREATE TABLE usernames (AccAddress String, Name String)')
 
@@ -45,7 +47,8 @@ except:
 
 increasepostopic = '0x2fe68525253654c21998f35787a8d0f361905ef647c854092430ab65f2f15022'
 decreasepostopic = '0x93d75d64d1f84fc6f430a64fc578bdd4c1e090e90ea2d51773e626d19de56d30'
-startblock = 24421028
+#startblock = 24421028
+beginblock = 227091
 topiclist = ['0x2fe68525253654c21998f35787a8d0f361905ef647c854092430ab65f2f15022','0x93d75d64d1f84fc6f430a64fc578bdd4c1e090e90ea2d51773e626d19de56d30']
 
 
@@ -58,7 +61,8 @@ tokenlist = {
     'usdt':'0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9',
     'dai':'0xda10009cbd5d07dd0cecc66161fc93d7c9000da1',
     'fxs':'0x9d2f299715d94d8a7e6f5eaa8e654e8c74a988a7',
-    'frax':'0x17fc002b466eec40dae837fc4be5c67993ddbd6f'
+    'frax':'0x17fc002b466eec40dae837fc4be5c67993ddbd6f',
+    'mim':'0xfea7a6a0b346362bf88a9e4a88416b77a57d6c2a'
     }
 
 #getting current block
@@ -73,6 +77,7 @@ multiplier = 1
 datatypes = ['Key','AccAddress','Collateral','Index','CollatDelta','SizeDelta','IsLong','Price','Fee']
 
 for txtopic in topiclist:
+    startblock = beginblock
     if txtopic == '0x2fe68525253654c21998f35787a8d0f361905ef647c854092430ab65f2f15022':
         print('Extracting increases.')
         multiplier = 1
@@ -90,8 +95,8 @@ for txtopic in topiclist:
             "method": "eth_getLogs",
             "params": [
                 {
-                "fromBlock": "0x174a2a4",
-                "toBlock": "0x177afe4",
+                "fromBlock": Web3.toHex(startblock),
+                "toBlock": Web3.toHex(targetblock),
                 "address": "0x489ee077994B6658eAfA855C308275EAd8097C4A",
                 "topics": [
                     txtopic
@@ -108,8 +113,8 @@ for txtopic in topiclist:
                 "method": "eth_getLogs",
                 "params": [
                     {
-                    "fromBlock": "0x174a2a4",
-                    "toBlock": "0x177afe4",
+                    "fromBlock": Web3.toHex(startblock),
+                    "toBlock": Web3.toHex(targetblock),
                     "address": "0x489ee077994B6658eAfA855C308275EAd8097C4A",
                     "topics": [
                         txtopic
@@ -123,7 +128,6 @@ for txtopic in topiclist:
                 break
         respdict = response.json()
         startblock = targetblock + 1
-        executetext = 'INSERT INTO transactions VALUES '
         for tx in respdict['result']:
             txdata = tx['data']
             txdata = txdata[2:]
@@ -152,7 +156,7 @@ for txtopic in topiclist:
                 parseddata['IsLong'] = True
             else:
                 parseddata['IsLong'] = False
-            cur.execute('INSERT INTO transactions VALUES (?,?,?,?,?,?,?,?,?,NULL)', (
+            cur.execute('INSERT INTO transactions VALUES (?,?,?,?,?,?,?,?,?,?)', (
                 parseddata['AccAddress'],
                 parseddata['Collateral'],
                 parseddata['Index'],
@@ -162,7 +166,11 @@ for txtopic in topiclist:
                 parseddata['Fee'],
                 parseddata['IsLong'],
                 Web3.toInt(hexstr=tx['blockNumber']),
+                tx['transactionHash']
                 ))
+                
         pbar.update(20000)
         con.commit()
+    pbar.close()
+con.close()
 

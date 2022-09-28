@@ -1,6 +1,7 @@
-from tqdm import tqdm
+import sqlite3
 
-pbar = tqdm(total=100)
-pbar.update(25)
-pbar.update(n=10)
-pbar(position=10)
+con = sqlite3.connect('transactions.db')
+cur = con.cursor()
+
+cur.execute('SELECT COUNT (DISTINCT AccAddress) FROM transactions')
+print(cur.fetchone())
