@@ -152,6 +152,10 @@ for txtopic in topiclist:
                 print(parseddata['Collateral'])
                 print(parseddata['Index'])
                 break
+            if parseddata['Collateral'] == 'wbtcalt':
+                parseddata['Collateral'] = 'wbtc'
+            if parseddata['Index'] == 'wbtcalt':
+                parseddata['Index'] = 'wbtc'
             if int(parseddata['IsLong']) == 1:
                 parseddata['IsLong'] = True
             else:
