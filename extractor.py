@@ -67,7 +67,7 @@ def updatedb(beginblock):
 
     multiplier = 1 #multiplied by size and collateral delta to make them negative if it's a decrease
     datatypes = ['Key','AccAddress','Collateral','Index','CollatDelta','SizeDelta','IsLong','Price','Fee']
-    pbar = tqdm(total=((curblock-startblock)*2)) #progressbar init
+    pbar = tqdm(total=((curblock-beginblock)*2)) #progressbar init
     for txtopic in topiclist:
         startblock = beginblock
         if txtopic == '0x2fe68525253654c21998f35787a8d0f361905ef647c854092430ab65f2f15022':

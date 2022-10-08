@@ -45,7 +45,7 @@ def assesstrader(tradelist):
         'uni':{'price':0.0,'units':0.0}   
         }}
     for i,trade in enumerate(tradelist):
-        print(i+1)
+        #print(i+1)
         direction = 'long' if trade['islong'] == 1 else 'short'
         multiplier = 1 if trade['islong'] == 1 else -1
         curpos = position[direction][trade['index']]
@@ -56,9 +56,9 @@ def assesstrader(tradelist):
             position[direction][trade['index']]['units'] += units
             collateral[direction][trade['index']] += trade['collatdelta']
             lev = position[direction][trade['index']]['units']*position[direction][trade['index']]['price']/collateral[direction][trade['index']]
-            print(f"{trade['index']} {direction.capitalize()} position increase to {position[direction][trade['index']]['units']:.2f} units at ${position[direction][trade['index']]['price']} avg, leverage = {lev:.2f}")
-            if trade['collatdelta'] > 0:
-                print(f"Added ${trade['collatdelta']}, now {collateral[direction][trade['index']]}")
+            #print(f"{trade['index']} {direction.capitalize()} position increase to {position[direction][trade['index']]['units']:.2f} units at ${position[direction][trade['index']]['price']} avg, leverage = {lev:.2f}")
+            #if trade['collatdelta'] > 0:
+            #    print(f"Added ${trade['collatdelta']}, now {collateral[direction][trade['index']]}")
         elif trade['sizedelta'] < 0:
             unitdecrease = trade['sizedelta']/curpos['price']
             profit = (trade['price']-curpos['price'])*unitdecrease*multiplier
@@ -67,16 +67,16 @@ def assesstrader(tradelist):
             collateral[direction][trade['index']] += trade['collatdelta']
             lev = position[direction][trade['index']]['units']*position[direction][trade['index']]['price']/collateral[direction][trade['index']]
             if trade['collatdelta'] == 0:
-                if lev < 1:
-                    print(f"Leverage is {lev}, position closed and collateral withdrawn.")
+                if (position[direction][trade['index']]['units']*trade['price']) < 5:
+                    #print(f"Leverage is {lev}, position closed and collateral withdrawn.")
                     collateral[direction][trade['index']] = 0.0
             finalisedtrade = [trade['block'],percentprofit]
             finishedtrades.append(finalisedtrade)
-            print(f"{trade['index']} Sold {unitdecrease*-1} units at {trade['price']} for a profit of {percentprofit*100}%. Leverage at {lev}")
+            #print(f"{trade['index']} Sold {unitdecrease*-1} units at {trade['price']} for a profit of {percentprofit*100}%. Leverage at {lev}")
         else:
             collateral[direction][trade['index']] += trade['collatdelta']
-            print(f"{trade['index']} Collateral change of {trade['collatdelta']}")
-        print('\n')
+            #print(f"{trade['index']} Collateral change of {trade['collatdelta']}")
+        #print('\n')
     return(finishedtrades)
 
 con = sqlite3.connect('transactions.db')
@@ -92,9 +92,11 @@ extractor.updatedb(targetblock)
 
 tradersandtrades = pullfromdb()
 profitlist = dict()
+pbar = tqdm(total=len(tradersandtrades))
 for name,tradelist in tradersandtrades.items():
-    print(name)
     profitlist[name] = assesstrader(tradelist)
+    pbar.update(1)
+pbar.close()
 
 for trader,profits in profitlist.items():
     total = 0
