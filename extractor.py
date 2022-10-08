@@ -54,7 +54,7 @@ def updatedb(beginblock):
         'wbtc':'0x2f2a2543b76a4166549f7aab2e75bef0aefc5b0f',
         'usdc':'0xff970a61a04b1ca14834a43f5de4533ebddb5cc8',
         'weth':'0x82af49447d8a07e3bd95bd0d56f35241523fbab1',
-        'wbtcalt':'0xfa7f8980b0f1e64a2062791cc3b0871572f1f7f0',
+        'uni':'0xfa7f8980b0f1e64a2062791cc3b0871572f1f7f0',
         'link':'0xf97f4df75117a78c1a5a0dbb814af92458539fb4',
         'usdt':'0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9',
         'dai':'0xda10009cbd5d07dd0cecc66161fc93d7c9000da1',
@@ -67,7 +67,7 @@ def updatedb(beginblock):
 
     multiplier = 1 #multiplied by size and collateral delta to make them negative if it's a decrease
     datatypes = ['Key','AccAddress','Collateral','Index','CollatDelta','SizeDelta','IsLong','Price','Fee']
-
+    pbar = tqdm(total=((curblock-startblock)*2)) #progressbar init
     for txtopic in topiclist:
         startblock = beginblock
         if txtopic == '0x2fe68525253654c21998f35787a8d0f361905ef647c854092430ab65f2f15022':
@@ -76,7 +76,7 @@ def updatedb(beginblock):
         else:
             print('Extracting decreases.')
             multiplier = -1
-        pbar = tqdm(total=(curblock-startblock)) #progressbar init
+        
         while startblock < curblock:
             targetblock = startblock + 20000 #grabbing 20000 blocks of transactions
             if targetblock > curblock:
@@ -145,10 +145,6 @@ def updatedb(beginblock):
                     print(parseddata['Collateral'])
                     print(parseddata['Index'])
                     break
-                if parseddata['Collateral'] == 'wbtcalt': #wbtc seems to use a proxy contract sometimes? confusing.
-                    parseddata['Collateral'] = 'wbtc'
-                if parseddata['Index'] == 'wbtcalt':
-                    parseddata['Index'] = 'wbtc'
                 if int(parseddata['IsLong']) == 1:
                     parseddata['IsLong'] = True
                 else:
@@ -168,7 +164,7 @@ def updatedb(beginblock):
                     
             pbar.update(20000)
             con.commit() #saves to db every 20000 blocks
-        pbar.close()
+    pbar.close()
     con.close()
 
 if __name__ == '__main__':

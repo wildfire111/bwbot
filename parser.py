@@ -27,19 +27,25 @@ def pullfromdb():
 
 def assesstrader(tradelist):
     finishedtrades = list()
-    collateral = {'weth':0.0,'wbtc':0.0,'link':0.0}
+    collateral = {
+        'long':{'weth':0.0,'wbtc':0.0,'link':0.0,'uni':0.0},
+        'short':{'weth':0.0,'wbtc':0.0,'link':0.0,'uni':0.0}
+        }
     position = {
         'long':{
         'weth':{'price':0.0,'units':0.0},
         'wbtc':{'price':0.0,'units':0.0},
-        'link':{'price':0.0,'units':0.0}
+        'link':{'price':0.0,'units':0.0},
+        'uni':{'price':0.0,'units':0.0}
         },
         'short':{
         'weth':{'price':0.0,'units':0.0},
         'wbtc':{'price':0.0,'units':0.0},
-        'link':{'price':0.0,'units':0.0}    
+        'link':{'price':0.0,'units':0.0},
+        'uni':{'price':0.0,'units':0.0}   
         }}
-    for trade in tradelist:
+    for i,trade in enumerate(tradelist):
+        print(i+1)
         direction = 'long' if trade['islong'] == 1 else 'short'
         multiplier = 1 if trade['islong'] == 1 else -1
         curpos = position[direction][trade['index']]
@@ -48,29 +54,28 @@ def assesstrader(tradelist):
             units = trade['sizedelta']/trade['price']
             position[direction][trade['index']]['price'] = (cursize+trade['sizedelta'])/(curpos['units']+units)
             position[direction][trade['index']]['units'] += units
-            collateral[trade['index']] += trade['collatdelta']
-            print(f'''{direction.capitalize()} position increase to {position[direction][trade['index']]['units']} \
-                  units at ${position[direction][trade['index']]['price']} avg, leverage = \
-                  {position[direction][trade['index']]['units']*position[direction][trade['index']]['price']/collateral[trade['index']]}''')
+            collateral[direction][trade['index']] += trade['collatdelta']
+            lev = position[direction][trade['index']]['units']*position[direction][trade['index']]['price']/collateral[direction][trade['index']]
+            print(f"{trade['index']} {direction.capitalize()} position increase to {position[direction][trade['index']]['units']:.2f} units at ${position[direction][trade['index']]['price']} avg, leverage = {lev:.2f}")
             if trade['collatdelta'] > 0:
-                print(f"Added ${trade['collatdelta']}, now {collateral[trade['index']]}")
+                print(f"Added ${trade['collatdelta']}, now {collateral[direction][trade['index']]}")
         elif trade['sizedelta'] < 0:
             unitdecrease = trade['sizedelta']/curpos['price']
             profit = (trade['price']-curpos['price'])*unitdecrease*multiplier
-            percentprofit = profit/collateral[trade['index']]
+            percentprofit = profit/collateral[direction][trade['index']]
             position[direction][trade['index']]['units'] += unitdecrease
-            collateral[trade['index']] += trade['collatdelta']
-            lev = position[direction][trade['index']]['units']*position[direction][trade['index']]['price']/collateral[trade['index']]
+            collateral[direction][trade['index']] += trade['collatdelta']
+            lev = position[direction][trade['index']]['units']*position[direction][trade['index']]['price']/collateral[direction][trade['index']]
             if trade['collatdelta'] == 0:
                 if lev < 1:
                     print(f"Leverage is {lev}, position closed and collateral withdrawn.")
-                    collateral[trade['index']] = 0.0
+                    collateral[direction][trade['index']] = 0.0
             finalisedtrade = [trade['block'],percentprofit]
             finishedtrades.append(finalisedtrade)
-            print(f"Sold {unitdecrease*-1} units at {trade['price']} for a profit of {percentprofit*100}%. Leverage at {lev}")
+            print(f"{trade['index']} Sold {unitdecrease*-1} units at {trade['price']} for a profit of {percentprofit*100}%. Leverage at {lev}")
         else:
-            collateral[trade['index']] += trade['collatdelta']
-            print(f"Collateral change of {trade['collatdelta']}")
+            collateral[direction][trade['index']] += trade['collatdelta']
+            print(f"{trade['index']} Collateral change of {trade['collatdelta']}")
         print('\n')
     return(finishedtrades)
 
@@ -88,6 +93,7 @@ extractor.updatedb(targetblock)
 tradersandtrades = pullfromdb()
 profitlist = dict()
 for name,tradelist in tradersandtrades.items():
+    print(name)
     profitlist[name] = assesstrader(tradelist)
 
 for trader,profits in profitlist.items():
