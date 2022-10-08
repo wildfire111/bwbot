@@ -1,6 +1,14 @@
 import sqlite3
 from tqdm import tqdm
 import extractor
+import datetime
+import requests
+import os
+from web3 import Web3
+from dotenv import load_dotenv
+load_dotenv()
+apikey = os.getenv('ALCH_KEY')
+url = 'https://arb-mainnet.g.alchemy.com/v2/'+apikey
 
 
         
@@ -79,31 +87,49 @@ def assesstrader(tradelist):
         #print('\n')
     return(finishedtrades)
 
-con = sqlite3.connect('transactions.db')
-cur = con.cursor()
-try:            
-    cur.execute('SELECT block FROM transactions ORDER BY block DESC LIMIT 1')
-    targetblock = cur.fetchone()[0]+1
-except:
-    targetblock = 227091
-con.close()
+def gettableblock():
+    con = sqlite3.connect('transactions.db')
+    cur = con.cursor()
+    try:            
+        cur.execute('SELECT block FROM transactions ORDER BY block DESC LIMIT 1')
+        tabblock = cur.fetchone()[0]+1
+    except:
+        tabblock = 227091
+    con.close()
+    return(tabblock)
+
+def findblockrate():
+    curblock = extractor.currentblock()
+    current = datetime.datetime.utcnow()
+    payload = {"jsonrpc": "2.0", "id": 0, "method": "eth_getBlockByNumber", "params":[Web3.toHex(curblock-500000),False]} 
+    headers = {"Accept": "application/json","Content-Type": "application/json"}
+    response = requests.post(url, json=payload, headers=headers)
+    respdict = response.json()
+    seconds = (current-datetime.datetime.utcfromtimestamp((Web3.toInt(hexstr=respdict['result']['timestamp'])))).total_seconds()
+    return(seconds/500000)
+
 extractor.checktables()
-extractor.updatedb(targetblock)
+extractor.updatedb(gettableblock())
+rate = findblockrate()
+weekblocks = 14*24*60*60/rate
+print(extractor.currentblock()-weekblocks)
 
-tradersandtrades = pullfromdb()
-profitlist = dict()
-pbar = tqdm(total=len(tradersandtrades))
-for name,tradelist in tradersandtrades.items():
-    profitlist[name] = assesstrader(tradelist)
-    pbar.update(1)
-pbar.close()
+#tradersandtrades = pullfromdb()
+#profitlist = dict()
+#pbar = tqdm(total=len(tradersandtrades))
+##for name,tradelist in tradersandtrades.items():
+#    profitlist[name] = assesstrader(tradelist)
+#    pbar.update(1)
+#pbar.close()
 
-for trader,profits in profitlist.items():
-    total = 0
-    for i in profits:
-        total += i[1]
-    print(f"Total PnL = {total*100:.2f}%")
-    
+#for trader,profits in profitlist.items():
+#    total = 0
+#    for i in profits:
+#        total += i[1]
+#    print(f"Total PnL = {total*100:.2f}%")
+
+#seconds since contract genesis
+
     
 
 
