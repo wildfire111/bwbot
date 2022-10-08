@@ -1,18 +1,13 @@
 import sqlite3
 from tqdm import tqdm
-from dotenv import load_dotenv
-import os
+import extractor
 
-load_dotenv()
 
-owner = os.getenv('OWNER')
-
-con = sqlite3.connect('transactions.db')
-cur = con.cursor()
         
 def pullfromdb():
-    global traders
-    cur.execute(f'SELECT * FROM transactions WHERE AccAddress = "{owner}" ORDER BY block ASC')
+    con = sqlite3.connect('transactions.db')
+    cur = con.cursor()
+    cur.execute(f'SELECT * FROM transactions ORDER BY block ASC')
     transactions = cur.fetchall()
     traders = dict()
     for tx in transactions:
@@ -27,23 +22,26 @@ def pullfromdb():
         if tx[0] not in traders:
             traders[tx[0]] = list()
         traders[tx[0]].append(tradedict)
+    return(traders)
+    con.close()
 
 def assesstrader(tradelist):
     finishedtrades = list()
-    collateral = {'weth':0.0,'btc':0.0,'link':0.0}
+    collateral = {'weth':0.0,'wbtc':0.0,'link':0.0}
     position = {
         'long':{
         'weth':{'price':0.0,'units':0.0},
-        'btc':{'price':0.0,'units':0.0},
+        'wbtc':{'price':0.0,'units':0.0},
         'link':{'price':0.0,'units':0.0}
         },
         'short':{
         'weth':{'price':0.0,'units':0.0},
-        'btc':{'price':0.0,'units':0.0},
+        'wbtc':{'price':0.0,'units':0.0},
         'link':{'price':0.0,'units':0.0}    
         }}
     for trade in tradelist:
         direction = 'long' if trade['islong'] == 1 else 'short'
+        multiplier = 1 if trade['islong'] == 1 else -1
         curpos = position[direction][trade['index']]
         cursize = curpos['price']*curpos['units']
         if trade['sizedelta'] > 0:
@@ -51,22 +49,20 @@ def assesstrader(tradelist):
             position[direction][trade['index']]['price'] = (cursize+trade['sizedelta'])/(curpos['units']+units)
             position[direction][trade['index']]['units'] += units
             collateral[trade['index']] += trade['collatdelta']
-            print(f'''{direction.capitalize()} position increase to {position[direction][trade['index']]['units']} units
-at ${position[direction][trade['index']]['price']} avg,
-leverage = {position[direction][trade['index']]['units']*position[direction][trade['index']]['price']/collateral[trade['index']]}''')
+            print(f'''{direction.capitalize()} position increase to {position[direction][trade['index']]['units']} \
+                  units at ${position[direction][trade['index']]['price']} avg, leverage = \
+                  {position[direction][trade['index']]['units']*position[direction][trade['index']]['price']/collateral[trade['index']]}''')
             if trade['collatdelta'] > 0:
                 print(f"Added ${trade['collatdelta']}, now {collateral[trade['index']]}")
         elif trade['sizedelta'] < 0:
             unitdecrease = trade['sizedelta']/curpos['price']
-            profit = (trade['price']-curpos['price'])*unitdecrease
+            profit = (trade['price']-curpos['price'])*unitdecrease*multiplier
             percentprofit = profit/collateral[trade['index']]
             position[direction][trade['index']]['units'] += unitdecrease
             collateral[trade['index']] += trade['collatdelta']
             lev = position[direction][trade['index']]['units']*position[direction][trade['index']]['price']/collateral[trade['index']]
             if trade['collatdelta'] == 0:
                 if lev < 1:
-                    if lev > 0:
-                        print(f"LEVERAGE FUCKED UP CHECK YOUR CODE, LEV: {lev}")
                     print(f"Leverage is {lev}, position closed and collateral withdrawn.")
                     collateral[trade['index']] = 0.0
             finalisedtrade = [trade['block'],percentprofit]
@@ -75,20 +71,25 @@ leverage = {position[direction][trade['index']]['units']*position[direction][tra
         else:
             collateral[trade['index']] += trade['collatdelta']
             print(f"Collateral change of {trade['collatdelta']}")
-        print('/')
+        print('\n')
     return(finishedtrades)
-            
-            
-        
-        
-    
-#{'index': 'weth', 'price': 1359.52, 'collatdelta': 0,
-# 'sizedelta': -13.9156, 'fee': 0.0139156, 'islong': 1, 'block': 25413877}
-pullfromdb()
+
+con = sqlite3.connect('transactions.db')
+cur = con.cursor()
+try:            
+    cur.execute('SELECT block FROM transactions ORDER BY block DESC LIMIT 1')
+    targetblock = cur.fetchone()[0]+1
+except:
+    targetblock = 227091
+con.close()
+extractor.checktables()
+extractor.updatedb(targetblock)
+
+tradersandtrades = pullfromdb()
 profitlist = dict()
-for name,tradelist in traders.items():
+for name,tradelist in tradersandtrades.items():
     profitlist[name] = assesstrader(tradelist)
-print(profitlist)
+
 for trader,profits in profitlist.items():
     total = 0
     for i in profits:
