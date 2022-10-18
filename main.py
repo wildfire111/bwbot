@@ -42,7 +42,7 @@ def pullfromdb(trader=False):
     return(traders)
     con.close()
 
-def assesstrader(tradelist): #input list of trades, returns dict of finalised trades {block:profit,}
+def assesstrader(tradelist,print=False): #input list of trades, returns dict of finalised trades {block:profit,}
     finishedtrades = list()
     collateral = {
         'long':{'weth':0.0,'wbtc':0.0,'link':0.0,'uni':0.0},
@@ -62,7 +62,6 @@ def assesstrader(tradelist): #input list of trades, returns dict of finalised tr
         'uni':{'price':0.0,'units':0.0}   
         }}
     for i,trade in enumerate(tradelist):
-        #print(i+1)
         direction = 'long' if trade['islong'] == 1 else 'short'
         multiplier = 1 if trade['islong'] == 1 else -1
         curpos = position[direction][trade['index']]
@@ -73,9 +72,10 @@ def assesstrader(tradelist): #input list of trades, returns dict of finalised tr
             position[direction][trade['index']]['units'] += units
             collateral[direction][trade['index']] += trade['collatdelta']
             lev = position[direction][trade['index']]['units']*position[direction][trade['index']]['price']/collateral[direction][trade['index']]
-            print(f"{trade['index']} {direction.capitalize()} position increase to {position[direction][trade['index']]['units']:.2f} units at ${position[direction][trade['index']]['price']} avg, leverage = {lev:.2f}")
-            #if trade['collatdelta'] > 0:
-            #print(f"Added ${trade['collatdelta']}, now {collateral[direction][trade['index']]}")
+            if print == True:
+                print(f"{trade['index']} {direction.capitalize()} position increase to {position[direction][trade['index']]['units']:.2f} units at ${position[direction][trade['index']]['price']} avg, leverage = {lev:.2f}")
+            if trade['collatdelta'] > 0 and print == True:
+                print(f"Added ${trade['collatdelta']}, now {collateral[direction][trade['index']]}")
         elif trade['sizedelta'] < 0:
             unitdecrease = trade['sizedelta']/curpos['price']
             profit = (trade['price']-curpos['price'])*(unitdecrease*-1)*multiplier
@@ -85,17 +85,21 @@ def assesstrader(tradelist): #input list of trades, returns dict of finalised tr
             lev = position[direction][trade['index']]['units']*position[direction][trade['index']]['price']/collateral[direction][trade['index']]
             if trade['collatdelta'] == 0:
                 if (position[direction][trade['index']]['units']*trade['price']) < 5:
-                    #print(f"Leverage is {lev}, position closed and collateral withdrawn.")
+                    if print == True:
+                        print(f"Leverage is {lev}, position closed and collateral withdrawn.")
                     collateral[direction][trade['index']] = 0.0
                     position[direction][trade['index']]['units'] = 0
                     position[direction][trade['index']]['price'] = 0
             finalisedtrade = [trade['block'],percentprofit]
             finishedtrades.append(finalisedtrade)
-            print(f"{trade['index']} Sold {unitdecrease*-1} units at {trade['price']} for a profit of {percentprofit*100}%. Leverage at {lev}")
+            if print == True:
+                print(f"{trade['index']} Sold {unitdecrease*-1} units at {trade['price']} for a profit of {percentprofit*100}%. Leverage at {lev}")
         else:
             collateral[direction][trade['index']] += trade['collatdelta']
-            print(f"{trade['index']} Collateral change of {trade['collatdelta']}")
-        print('\n')
+            if print == True:
+                print(f"{trade['index']} Collateral change of {trade['collatdelta']}")
+        if print == True:
+            print('\n')
     return(finishedtrades)
 
 def gettableblock():
@@ -161,16 +165,13 @@ def findbest():
 
 def checktrader(trader):
     trades = pullfromdb(trader)[f'{trader}']
-    print(assesstrader(trades))
+    print(assesstrader(trades,True))
 
-checktrader("0x487a2fd64096f90f19caa57b34b0714a2e8f6be7")  
-        
 
-        
-
-#extractor.checktables()
-#extractor.updatedb(gettableblock())
-
+extractor.checktables()
+extractor.updatedb(gettableblock())
+#findbest()
+checktrader('0xd1c1d7ade57144f0b7bfad2aaf3e99d26fa89b29')
 #tradersandtrades = pullfromdb()
 #profitlist = dict()
 #pbar = tqdm(total=len(tradersandtrades))
