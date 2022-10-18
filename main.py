@@ -1,21 +1,30 @@
+print('running...')
 import sqlite3
 from tqdm import tqdm
 import extractor
 import datetime
 import requests
 import os
+import time
+import json
 from web3 import Web3
 from dotenv import load_dotenv
 load_dotenv()
 apikey = os.getenv('ALCH_KEY')
-url = 'https://arb-mainnet.g.alchemy.com/v2/'+apikey
+arbiapi = os.getenv('ARBI')
+alchurl = 'https://arb-mainnet.g.alchemy.com/v2/'+apikey
+
+
 
 
         
-def pullfromdb():
+def pullfromdb(trader=False):
     con = sqlite3.connect('transactions.db')
     cur = con.cursor()
-    cur.execute(f'SELECT * FROM transactions ORDER BY block ASC')
+    if trader != False:
+        cur.execute(f'SELECT * FROM transactions WHERE AccAddress = "{trader}" ORDER BY block ASC')
+    else:
+        cur.execute(f'SELECT * FROM transactions ORDER BY block ASC')
     transactions = cur.fetchall()
     traders = dict()
     for tx in transactions:
@@ -33,7 +42,7 @@ def pullfromdb():
     return(traders)
     con.close()
 
-def assesstrader(tradelist):
+def assesstrader(tradelist): #input list of trades, returns dict of finalised trades {block:profit,}
     finishedtrades = list()
     collateral = {
         'long':{'weth':0.0,'wbtc':0.0,'link':0.0,'uni':0.0},
@@ -64,12 +73,12 @@ def assesstrader(tradelist):
             position[direction][trade['index']]['units'] += units
             collateral[direction][trade['index']] += trade['collatdelta']
             lev = position[direction][trade['index']]['units']*position[direction][trade['index']]['price']/collateral[direction][trade['index']]
-            #print(f"{trade['index']} {direction.capitalize()} position increase to {position[direction][trade['index']]['units']:.2f} units at ${position[direction][trade['index']]['price']} avg, leverage = {lev:.2f}")
+            print(f"{trade['index']} {direction.capitalize()} position increase to {position[direction][trade['index']]['units']:.2f} units at ${position[direction][trade['index']]['price']} avg, leverage = {lev:.2f}")
             #if trade['collatdelta'] > 0:
-            #    print(f"Added ${trade['collatdelta']}, now {collateral[direction][trade['index']]}")
+            #print(f"Added ${trade['collatdelta']}, now {collateral[direction][trade['index']]}")
         elif trade['sizedelta'] < 0:
             unitdecrease = trade['sizedelta']/curpos['price']
-            profit = (trade['price']-curpos['price'])*unitdecrease*multiplier
+            profit = (trade['price']-curpos['price'])*(unitdecrease*-1)*multiplier
             percentprofit = profit/collateral[direction][trade['index']]
             position[direction][trade['index']]['units'] += unitdecrease
             collateral[direction][trade['index']] += trade['collatdelta']
@@ -78,13 +87,15 @@ def assesstrader(tradelist):
                 if (position[direction][trade['index']]['units']*trade['price']) < 5:
                     #print(f"Leverage is {lev}, position closed and collateral withdrawn.")
                     collateral[direction][trade['index']] = 0.0
+                    position[direction][trade['index']]['units'] = 0
+                    position[direction][trade['index']]['price'] = 0
             finalisedtrade = [trade['block'],percentprofit]
             finishedtrades.append(finalisedtrade)
-            #print(f"{trade['index']} Sold {unitdecrease*-1} units at {trade['price']} for a profit of {percentprofit*100}%. Leverage at {lev}")
+            print(f"{trade['index']} Sold {unitdecrease*-1} units at {trade['price']} for a profit of {percentprofit*100}%. Leverage at {lev}")
         else:
             collateral[direction][trade['index']] += trade['collatdelta']
-            #print(f"{trade['index']} Collateral change of {trade['collatdelta']}")
-        #print('\n')
+            print(f"{trade['index']} Collateral change of {trade['collatdelta']}")
+        print('\n')
     return(finishedtrades)
 
 def gettableblock():
@@ -98,21 +109,67 @@ def gettableblock():
     con.close()
     return(tabblock)
 
-def findblockrate():
-    curblock = extractor.currentblock()
-    current = datetime.datetime.utcnow()
-    payload = {"jsonrpc": "2.0", "id": 0, "method": "eth_getBlockByNumber", "params":[Web3.toHex(curblock-500000),False]} 
-    headers = {"Accept": "application/json","Content-Type": "application/json"}
-    response = requests.post(url, json=payload, headers=headers)
-    respdict = response.json()
-    seconds = (current-datetime.datetime.utcfromtimestamp((Web3.toInt(hexstr=respdict['result']['timestamp'])))).total_seconds()
-    return(seconds/500000)
+def getblockbytime(timestamp):
+    arbiurl = f'https://api.arbiscan.io/api?module=block&action=getblocknobytime&timestamp={timestamp}&closest=before&apikey={arbiapi}'
+    response = requests.post(arbiurl)
+    time.sleep(0.2) #api is limited to 5 requests a second
+    if response.json()['status'] != 0:
+        return response.json()['result']
+    else:
+        print('error in getting block by time')
+        return(False)
 
-extractor.checktables()
-extractor.updatedb(gettableblock())
-rate = findblockrate()
-weekblocks = 14*24*60*60/rate
-print(extractor.currentblock()-weekblocks)
+def gettimebyblock(block):
+    block = Web3.toHex(block)
+    payload = {"jsonrpc": "2.0", "id": 0, "method": "eth_getBlockByNumber", "params": [block,False]}
+    headers = {"Accept": "application/json","Content-Type": "application/json"}
+    response = requests.post(alchurl, json=payload, headers=headers)
+    respdict = response.json()
+    return Web3.toInt(hexstr=respdict['result']['timestamp'])
+
+def findbest():
+    traderlist = pullfromdb()
+    weeksback = int(input('How many weeks to go back and compare previous performance against: '))
+    weeks = datetime.datetime.utcnow() - datetime.timedelta(days=(7*weeksback))
+    splitblock = int(getblockbytime(round(weeks.timestamp())))
+    for trader,trades in traderlist.items():
+        countforward = 0
+        countback = 0
+        if trades[0]['block'] > splitblock:
+            continue
+        for trade in trades:
+            if trade['block'] > int(splitblock):
+                countforward += 1
+            else:
+                countback += 1
+        if countforward < (2*weeksback) or countback < 30:
+            continue #This makes sure the trader has made more than 3 trades a week in the comparing period.
+        profits = assesstrader(trades)
+        sum = 0
+        for trade in profits:
+            sum += trade[1]
+        if sum < 0:
+            continue
+        profit = 0
+        for trade in profits:
+            profit += trade[1]    
+        days = (datetime.datetime.utcnow()-datetime.datetime.fromtimestamp(gettimebyblock(trades[0]['block']))).days
+        profit = profit/days
+        if profit < 0.05:
+            continue
+        print(f"{trader} {round((1+(profit/10))**365,2)}%")
+
+def checktrader(trader):
+    trades = pullfromdb(trader)[f'{trader}']
+    print(assesstrader(trades))
+
+checktrader("0x487a2fd64096f90f19caa57b34b0714a2e8f6be7")  
+        
+
+        
+
+#extractor.checktables()
+#extractor.updatedb(gettableblock())
 
 #tradersandtrades = pullfromdb()
 #profitlist = dict()

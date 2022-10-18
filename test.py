@@ -1,7 +1,7 @@
-from classes import trader
+import requests
 
-test = trader('traderaddress')
-trade1 = [1,2,3,4,5,6,7,8,9,10,11]
-print(test)
-trader.addtrade('a',trade1)
-print(test)
+apikey = 'NHPRBPYDJKFBWHDNIA86HPIMJ1KPPG7AWZ'
+url = f"https://api.arbiscan.io/api?module=block&action=getblocknobytime&timestamp=1601510400&closest=before&apikey={apikey}"
+
+response = requests.post(url)
+print(response.ok)
