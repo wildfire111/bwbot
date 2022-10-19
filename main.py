@@ -107,6 +107,7 @@ Average price was ${curpos['price']:.3f} for a profit of {percentprofit*100:.3f}
                 print(f"{trade['index']} Collateral change of {trade['collatdelta']}")
     return(finishedtrades)
 
+
 def gettableblock():
     con = sqlite3.connect('transactions.db')
     cur = con.cursor()
