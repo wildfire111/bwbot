@@ -13,6 +13,7 @@ load_dotenv()
 apikey = os.getenv('ALCH_KEY')
 arbiapi = os.getenv('ARBI')
 alchurl = 'https://arb-mainnet.g.alchemy.com/v2/'+apikey
+owner = os.getenv('OWNER')
 
 
 
@@ -64,23 +65,57 @@ def assesstrader(tradelist,printout=False): #input list of trades, returns dict 
             'uni':{'price':0.0,'units':0.0}   
         }}
     for i,trade in enumerate(tradelist):
+        #example trade
         #{'index': 'wbtc', 'price': 24055, 'collatdelta': 23.981016,
         #'sizedelta': 447.14335079, 'fee': 0.44714335079, 'islong': 0, 'block': 20300217}
+        if printout == True:
+            print(f"{i+1}.")
         token = trade['index']
         direction = 'long' if trade['islong'] == 1 else 'short'
         multiplier = 1 if trade['islong'] == 1 else -1
         existingpriceavg = position[direction][token]['price']
         if trade['sizedelta'] < 0: #if trade is closing, find the profit
-            unitdecrease = trade['sizedelta']/existingpriceavg*-1
+            unitdecrease = trade['sizedelta']/existingpriceavg*-1 #made positive
             dollarprofit = ((trade['price']-existingpriceavg)*multiplier)*unitdecrease
             percentprofit = dollarprofit/collateral[direction][token]#dollars profit vs collateral risked
-            finishedtrades[trade['block']] = percentprofit
+            finishedtrades.append([trade['block'],percentprofit])
             if printout == True:
                 print(f"{token.upper()} {direction.capitalize()} - Sold {unitdecrease:.2f} units")
                 print(f"Avg price was {existingpriceavg:.2f}, sold for {trade['price']:.2f}")
+            position[direction][token]['units'] -= unitdecrease #update units held to reflect sold units
         elif trade['sizedelta'] > 0: #add in purchase, update price avg
-            
-
+            unitincrease = trade['sizedelta']/trade['price']
+            currentdollars = position[direction][token]['price']*position[direction][token]['units']
+            newavg = (currentdollars+trade['sizedelta'])/(unitincrease+position[direction][token]['units'])
+            # ^ this is the new price average incorporating the old position
+            if printout == True:
+                print(f"{token.upper()} {direction.capitalize()} - Bought {unitincrease:.2f} units")
+                print(f"Bought at {trade['price']:.2f}, new price average {newavg:.2f}")
+            position[direction][token]['price'] = newavg
+            position[direction][token]['units'] += unitincrease
+        if printout == True:
+            print(f"{token.upper()} {direction.capitalize()} - Collateral change ${trade['collatdelta']}")
+        collateral[direction][token] += trade['collatdelta'] #updating collat
+        
+        #because a fully closed position shows as 0 collatdelta on a trade, we need to
+        #check our leverage, because we will see a negative sizedelta resulting in a leverage
+        #under 1.1, not allowed by gmx. This way we can identify closed positions.
+        #It gets complicated because none of our numbers are exact, since we're not dealing
+        #with fees, since they are charged hourly depending on open interest. This is my best
+        #attempt, and likely to not be perfect.
+        openposition = position[direction][token]['price']*position[direction][token]['units']
+        opencollat = collateral[direction][token]
+        leverage = openposition/opencollat
+        if printout == True:
+            print(f"Leverage at {leverage:.2f}")
+        if leverage <= 1:
+            collateral[direction][token] = 0
+            if printout == True:
+                print(f"Leverage < 1, collateral set to 0.")
+        if leverage <= 1.09 and leverage >= 0.1:
+            if printout == True:
+                print('##########################################')
+        pass
     return(finishedtrades)
 
 
@@ -121,6 +156,9 @@ def findbest():
     for trader,trades in traderlist.items():
         countforward = 0
         countback = 0
+        if len(trades) == 50:
+            print(trader)
+            break
         if trades[0]['block'] > splitblock:
             continue
         for trade in trades:
@@ -153,7 +191,7 @@ def checktrader(trader):
 #extractor.checktables()
 #extractor.updatedb(gettableblock())
 #findbest()
-checktrader('0xd072b9f0259bda9f98aef0986d6a0f7937b3a49e')
+checktrader(owner)
 #tradersandtrades = pullfromdb()
 #profitlist = dict()
 #pbar = tqdm(total=len(tradersandtrades))

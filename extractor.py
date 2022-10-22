@@ -48,7 +48,10 @@ def updatedb(beginblock):
     con = sqlite3.connect('transactions.db')
     cur = con.cursor()
     #Define topics for increasing and decreasing positions for finding tx's.
-    topiclist = ['0x2fe68525253654c21998f35787a8d0f361905ef647c854092430ab65f2f15022','0x93d75d64d1f84fc6f430a64fc578bdd4c1e090e90ea2d51773e626d19de56d30']
+    topiclist = [
+        '0x2fe68525253654c21998f35787a8d0f361905ef647c854092430ab65f2f15022',
+        '0x93d75d64d1f84fc6f430a64fc578bdd4c1e090e90ea2d51773e626d19de56d30',
+        '0x2e1f85a64a2f22cf2f0c42584e7c919ed4abe8d53675cff0f62bf1e95a1c676f']
 
     tokenlist = { #all the tokens that can be collateral
         'wbtc':'0x2f2a2543b76a4166549f7aab2e75bef0aefc5b0f',
@@ -67,15 +70,14 @@ def updatedb(beginblock):
 
     multiplier = 1 #multiplied by size and collateral delta to make them negative if it's a decrease
     datatypes = ['Key','AccAddress','Collateral','Index','CollatDelta','SizeDelta','IsLong','Price','Fee']
-    pbar = tqdm(total=((curblock-beginblock)*2)) #progressbar init
+    liqdatatypes = ['Key','AccAddress','Collateral','Index','IsLong','SizeDelta','CollatDelta','Fee','PnL','Price']
+    pbar = tqdm(total=((curblock-beginblock)*3)) #progressbar init
     for txtopic in topiclist:
         startblock = beginblock
         if txtopic == '0x2fe68525253654c21998f35787a8d0f361905ef647c854092430ab65f2f15022':
-            print('Extracting increases.')
             multiplier = 1
         else:
-            print('Extracting decreases.')
-            multiplier = -1
+            multiplier = -1 #either a position decrease or liquidation
         
         while startblock < curblock:
             targetblock = startblock + 20000 #grabbing 20000 blocks of transactions
@@ -125,7 +127,12 @@ def updatedb(beginblock):
                 txdata = tx['data'] #everything we want is in data in one big block
                 txdata = txdata[2:] #so we want to break it into useable chunks and assign to dictionary
                 parseddata = dict()
-                for type in datatypes:
+                #If tx == liquidation
+                if txtopic == '0x2e1f85a64a2f22cf2f0c42584e7c919ed4abe8d53675cff0f62bf1e95a1c676f':
+                    curdatatypes = liqdatatypes
+                else:
+                    curdatatypes = datatypes
+                for type in curdatatypes:
                     parseddata[type] = txdata[0:64]
                     txdata = txdata[64:]
                 parseddata['AccAddress'] = (Web3.toHex(hexstr=parseddata['AccAddress'][24:]))
@@ -135,6 +142,8 @@ def updatedb(beginblock):
                 parseddata['CollatDelta'] = Web3.toInt(hexstr=parseddata['CollatDelta'])/(10**30)*multiplier
                 parseddata['SizeDelta'] = Web3.toInt(hexstr=parseddata['SizeDelta'])/(10**30)*multiplier
                 parseddata['Fee'] = Web3.toInt(hexstr=parseddata['Fee'])/(10**30)
+                else: #this is where we handle liquidations
+                    
                 for a,b in tokenlist.items():
                     if parseddata['Collateral'] == b: #assigning plaintext instead of hex address
                         parseddata['Collateral'] = a
