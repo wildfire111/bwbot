@@ -13,6 +13,7 @@ load_dotenv()
 apikey = os.getenv('ALCH_KEY')
 arbiapi = os.getenv('ARBI')
 alchurl = 'https://arb-mainnet.g.alchemy.com/v2/'+apikey
+owner = os.getenv('OWNER')
 
 
 
@@ -45,66 +46,74 @@ def pullfromdb(trader=False):
 def assesstrader(tradelist,printout=False): #input list of trades, returns dict of finalised trades {block:profit,}
     finishedtrades = list()
     collateral = {
-        'long':{'weth':0.0,'wbtc':0.0,'link':0.0,'uni':0.0},
-        'short':{'weth':0.0,'wbtc':0.0,'link':0.0,'uni':0.0}
+        'long':{
+            'weth':0.0,'wbtc':0.0,'link':0.0,'uni':0.0},
+        'short':{
+            'weth':0.0,'wbtc':0.0,'link':0.0,'uni':0.0}
         }
     position = {
         'long':{
-        'weth':{'price':0.0,'units':0.0},
-        'wbtc':{'price':0.0,'units':0.0},
-        'link':{'price':0.0,'units':0.0},
-        'uni':{'price':0.0,'units':0.0}
+            'weth':{'price':0.0,'units':0.0},
+            'wbtc':{'price':0.0,'units':0.0},
+            'link':{'price':0.0,'units':0.0},
+            'uni':{'price':0.0,'units':0.0}
         },
         'short':{
-        'weth':{'price':0.0,'units':0.0},
-        'wbtc':{'price':0.0,'units':0.0},
-        'link':{'price':0.0,'units':0.0},
-        'uni':{'price':0.0,'units':0.0}   
+            'weth':{'price':0.0,'units':0.0},
+            'wbtc':{'price':0.0,'units':0.0},
+            'link':{'price':0.0,'units':0.0},
+            'uni':{'price':0.0,'units':0.0}   
         }}
     for i,trade in enumerate(tradelist):
-        if i == 128:
-            print('163')
+        #example trade
+        #{'index': 'wbtc', 'price': 24055, 'collatdelta': 23.981016,
+        #'sizedelta': 447.14335079, 'fee': 0.44714335079, 'islong': 0, 'block': 20300217}
+        if printout == True:
+            print(f"{i+1}.")
+        token = trade['index']
         direction = 'long' if trade['islong'] == 1 else 'short'
         multiplier = 1 if trade['islong'] == 1 else -1
-        curpos = position[direction][trade['index']]
-        cursize = curpos['price']*curpos['units']
-        if trade['sizedelta'] > 0:
-            units = trade['sizedelta']/trade['price']
-            position[direction][trade['index']]['price'] = (cursize+trade['sizedelta'])/(curpos['units']+units)
-            position[direction][trade['index']]['units'] += units
-            collateral[direction][trade['index']] += trade['collatdelta']
-            lev = position[direction][trade['index']]['units']*position[direction][trade['index']]['price']/collateral[direction][trade['index']]
+        existingpriceavg = position[direction][token]['price']
+        if trade['sizedelta'] < 0: #if trade is closing, find the profit
+            unitdecrease = trade['sizedelta']/existingpriceavg*-1 #made positive
+            dollarprofit = ((trade['price']-existingpriceavg)*multiplier)*unitdecrease
+            percentprofit = dollarprofit/collateral[direction][token] #dollars profit vs collateral risked
+            finishedtrades.append([trade['block'],percentprofit])
             if printout == True:
-                print(f"""
-{i+1}. {trade['index'].upper()} {direction.capitalize()} position increased by ${trade['sizedelta']:.3f}.
-{position[direction][trade['index']]['units']:.3f} units at ${trade['price']:.3f}.
-Position average price now ${position[direction][trade['index']]['price']:.3f}, leverage = {lev:.3f}.""")
-            if trade['collatdelta'] > 0 and printout == True:
-                print(f"Collat added ${trade['collatdelta']}, now ${collateral[direction][trade['index']]} for {trade['index']} {direction}")
-        elif trade['sizedelta'] < 0:
-            unitdecrease = trade['sizedelta']/curpos['price']
-            profit = (trade['price']-curpos['price'])*(unitdecrease*-1)*multiplier
-            percentprofit = profit/collateral[direction][trade['index']]
-            position[direction][trade['index']]['units'] += unitdecrease
-            collateral[direction][trade['index']] += trade['collatdelta']
-            lev = position[direction][trade['index']]['units']*position[direction][trade['index']]['price']/collateral[direction][trade['index']]
+                print(f"{token.upper()} {direction.capitalize()} - Sold {unitdecrease:.2f} units")
+                print(f"Avg price was {existingpriceavg:.2f}, sold for {trade['price']:.2f}")
+                print(f"Profit: ${dollarprofit}")
+            position[direction][token]['units'] -= unitdecrease #update units held to reflect sold units
+        elif trade['sizedelta'] > 0: #add in purchase, update price avg
+            unitincrease = trade['sizedelta']/trade['price']
+            currentdollars = position[direction][token]['price']*position[direction][token]['units']
+            newavg = (currentdollars+trade['sizedelta'])/(unitincrease+position[direction][token]['units'])
+            # ^ this is the new price average incorporating the old position
             if printout == True:
-                print(f"""
-{i+1}. {trade['index'].upper()} {direction.capitalize()} sold {unitdecrease*-1:.3f} units at ${trade['price']:.3f}
-Average price was ${curpos['price']:.3f} for a profit of {percentprofit*100:.3f}%.""")
-            if trade['collatdelta'] == 0:
-                if lev < 0.1:
-                    if printout == True:
-                        print(f"Leverage is {lev:.3f}, position closed and collateral withdrawn.")
-                    collateral[direction][trade['index']] = 0.0
-                    position[direction][trade['index']]['units'] = 0
-                    position[direction][trade['index']]['price'] = 0
-            finalisedtrade = [trade['block'],percentprofit]
-            finishedtrades.append(finalisedtrade)
-        else:
-            collateral[direction][trade['index']] += trade['collatdelta']
+                print(f"{token.upper()} {direction.capitalize()} - Bought {unitincrease:.2f} units")
+                print(f"Bought at {trade['price']:.2f}, new price average {newavg:.2f}")
+            position[direction][token]['price'] = newavg
+            position[direction][token]['units'] += unitincrease
+        if printout == True:
+            print(f"{token.upper()} {direction.capitalize()} - Collateral change ${trade['collatdelta']}")
+        collateral[direction][token] += trade['collatdelta'] #updating collat
+        
+        #because a fully closed position shows as 0 collatdelta on a trade, we need to
+        #check our leverage, because we will see a negative sizedelta resulting in a leverage
+        #under 1.1, not allowed by gmx. This way we can identify closed positions.
+        #It gets complicated because none of our numbers are exact, since we're not dealing
+        #with fees, since they are charged hourly depending on open interest. This is my best
+        #attempt, and likely to not be perfect.
+        openposition = position[direction][token]['price']*position[direction][token]['units']
+        opencollat = collateral[direction][token]
+        leverage = openposition/opencollat
+        if printout == True:
+            print(f"Leverage at {leverage:.2f}")
+        if leverage <= 0.01:
+            collateral[direction][token] = 0
             if printout == True:
-                print(f"{trade['index']} Collateral change of {trade['collatdelta']}")
+                print(f"Leverage < 0.01, collateral set to 0.")
+        pass
     return(finishedtrades)
 
 
@@ -122,7 +131,6 @@ def gettableblock():
 def getblockbytime(timestamp):
     arbiurl = f'https://api.arbiscan.io/api?module=block&action=getblocknobytime&timestamp={timestamp}&closest=before&apikey={arbiapi}'
     response = requests.post(arbiurl)
-    time.sleep(0.2) #api is limited to 5 requests a second
     if response.json()['status'] != 0:
         return response.json()['result']
     else:
@@ -139,7 +147,7 @@ def gettimebyblock(block):
 
 def findbest():
     traderlist = pullfromdb()
-    weeksback = int(input('How many weeks to go back and compare previous performance against: '))
+    weeksback = 8
     weeks = datetime.datetime.utcnow() - datetime.timedelta(days=(7*weeksback))
     splitblock = int(getblockbytime(round(weeks.timestamp())))
     for trader,trades in traderlist.items():
@@ -155,19 +163,12 @@ def findbest():
         if countforward < (2*weeksback) or countback < 30:
             continue #This makes sure the trader has made more than 3 trades a week in the comparing period.
         profits = assesstrader(trades)
-        sum = 0
+        sum = 1
         for trade in profits:
-            sum += trade[1]
-        if sum < 0:
+            sum = sum*(trade[1]+1)
+        if sum < 100:
             continue
-        profit = 0
-        for trade in profits:
-            profit += trade[1]    
-        days = (datetime.datetime.utcnow()-datetime.datetime.fromtimestamp(gettimebyblock(trades[0]['block']))).days
-        profit = profit/days
-        if profit < 0.05:
-            continue
-        print(f"{trader} {round((1+(profit/10))**365,2)}%")
+        print(f"{trader} {round(sum,2)}%")
 
 def checktrader(trader):
     trades = pullfromdb(trader)[f'{trader}']
@@ -175,9 +176,10 @@ def checktrader(trader):
 
 
 #extractor.checktables()
+#extractor.updatedb(24421014)
 #extractor.updatedb(gettableblock())
-#findbest()
-checktrader('0xd072b9f0259bda9f98aef0986d6a0f7937b3a49e')
+#checktrader(owner)
+checktrader('0x3880f8d054b10d229d540dd1b95967b93cb27d0a')
 #tradersandtrades = pullfromdb()
 #profitlist = dict()
 #pbar = tqdm(total=len(tradersandtrades))
