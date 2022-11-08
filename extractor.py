@@ -142,7 +142,10 @@ def updatedb(beginblock):
                 parseddata['CollatDelta'] = Web3.toInt(hexstr=parseddata['CollatDelta'])/(10**30)*multiplier
                 parseddata['SizeDelta'] = Web3.toInt(hexstr=parseddata['SizeDelta'])/(10**30)*multiplier
                 parseddata['Fee'] = Web3.toInt(hexstr=parseddata['Fee'])/(10**30)
-                else: #this is where we handle liquidations
+                if txtopic == '0x2e1f85a64a2f22cf2f0c42584e7c919ed4abe8d53675cff0f62bf1e95a1c676f':
+                    parseddata['CollatDelta'] = 0
+                    #this is so the parser works correctly, as the liquidation transaction deducts fees from collat which we don't want.
+                
                     
                 for a,b in tokenlist.items():
                     if parseddata['Collateral'] == b: #assigning plaintext instead of hex address

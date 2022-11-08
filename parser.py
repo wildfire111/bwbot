@@ -77,11 +77,12 @@ def assesstrader(tradelist,printout=False): #input list of trades, returns dict 
         if trade['sizedelta'] < 0: #if trade is closing, find the profit
             unitdecrease = trade['sizedelta']/existingpriceavg*-1 #made positive
             dollarprofit = ((trade['price']-existingpriceavg)*multiplier)*unitdecrease
-            percentprofit = dollarprofit/collateral[direction][token]#dollars profit vs collateral risked
+            percentprofit = dollarprofit/collateral[direction][token] #dollars profit vs collateral risked
             finishedtrades.append([trade['block'],percentprofit])
             if printout == True:
                 print(f"{token.upper()} {direction.capitalize()} - Sold {unitdecrease:.2f} units")
                 print(f"Avg price was {existingpriceavg:.2f}, sold for {trade['price']:.2f}")
+                print(f"Profit: ${dollarprofit}")
             position[direction][token]['units'] -= unitdecrease #update units held to reflect sold units
         elif trade['sizedelta'] > 0: #add in purchase, update price avg
             unitincrease = trade['sizedelta']/trade['price']
@@ -108,13 +109,10 @@ def assesstrader(tradelist,printout=False): #input list of trades, returns dict 
         leverage = openposition/opencollat
         if printout == True:
             print(f"Leverage at {leverage:.2f}")
-        if leverage <= 1:
+        if leverage <= 0.01:
             collateral[direction][token] = 0
             if printout == True:
-                print(f"Leverage < 1, collateral set to 0.")
-        if leverage <= 1.09 and leverage >= 0.1:
-            if printout == True:
-                print('##########################################')
+                print(f"Leverage < 0.01, collateral set to 0.")
         pass
     return(finishedtrades)
 
@@ -133,7 +131,6 @@ def gettableblock():
 def getblockbytime(timestamp):
     arbiurl = f'https://api.arbiscan.io/api?module=block&action=getblocknobytime&timestamp={timestamp}&closest=before&apikey={arbiapi}'
     response = requests.post(arbiurl)
-    time.sleep(0.2) #api is limited to 5 requests a second
     if response.json()['status'] != 0:
         return response.json()['result']
     else:
@@ -150,15 +147,12 @@ def gettimebyblock(block):
 
 def findbest():
     traderlist = pullfromdb()
-    weeksback = int(input('How many weeks to go back and compare previous performance against: '))
+    weeksback = 8
     weeks = datetime.datetime.utcnow() - datetime.timedelta(days=(7*weeksback))
     splitblock = int(getblockbytime(round(weeks.timestamp())))
     for trader,trades in traderlist.items():
         countforward = 0
         countback = 0
-        if len(trades) == 50:
-            print(trader)
-            break
         if trades[0]['block'] > splitblock:
             continue
         for trade in trades:
@@ -169,19 +163,12 @@ def findbest():
         if countforward < (2*weeksback) or countback < 30:
             continue #This makes sure the trader has made more than 3 trades a week in the comparing period.
         profits = assesstrader(trades)
-        sum = 0
+        sum = 1
         for trade in profits:
-            sum += trade[1]
-        if sum < 0:
+            sum = sum*(trade[1]+1)
+        if sum < 100:
             continue
-        profit = 0
-        for trade in profits:
-            profit += trade[1]    
-        days = (datetime.datetime.utcnow()-datetime.datetime.fromtimestamp(gettimebyblock(trades[0]['block']))).days
-        profit = profit/days
-        if profit < 0.05:
-            continue
-        print(f"{trader} {round((1+(profit/10))**365,2)}%")
+        print(f"{trader} {round(sum,2)}%")
 
 def checktrader(trader):
     trades = pullfromdb(trader)[f'{trader}']
@@ -189,9 +176,10 @@ def checktrader(trader):
 
 
 #extractor.checktables()
+#extractor.updatedb(24421014)
 #extractor.updatedb(gettableblock())
-#findbest()
-checktrader(owner)
+#checktrader(owner)
+checktrader('0x3880f8d054b10d229d540dd1b95967b93cb27d0a')
 #tradersandtrades = pullfromdb()
 #profitlist = dict()
 #pbar = tqdm(total=len(tradersandtrades))
