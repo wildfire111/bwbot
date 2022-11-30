@@ -180,5 +180,6 @@ def updatedb(beginblock):
     con.close()
 
 if __name__ == '__main__':
+    print('Running extractor.py')
     checktables()
     updatedb('227091') #block that GMX contracts were created

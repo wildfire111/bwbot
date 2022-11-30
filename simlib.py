@@ -24,7 +24,12 @@ def getblockweekdelimiters():
         pbar.update(1)
     print(blocklist)
     
-getblockweekdelimiters()
-#    return blocklist
-#def converttoweekly(trades,mode):
+def main():
+    getblockweekdelimiters()
+
+
+if __name__ == '__main__':
+    print('Running simlib.py')
+    main()   
+
     

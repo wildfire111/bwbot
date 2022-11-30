@@ -179,7 +179,7 @@ def checktrader(trader):
 #extractor.updatedb(24421014)
 #extractor.updatedb(gettableblock())
 #checktrader(owner)
-checktrader('0x3880f8d054b10d229d540dd1b95967b93cb27d0a')
+#checktrader('0x3880f8d054b10d229d540dd1b95967b93cb27d0a')
 #tradersandtrades = pullfromdb()
 #profitlist = dict()
 #pbar = tqdm(total=len(tradersandtrades))
@@ -194,7 +194,6 @@ checktrader('0x3880f8d054b10d229d540dd1b95967b93cb27d0a')
 #        total += i[1]
 #    print(f"Total PnL = {total*100:.3f}%")
 
-#seconds since contract genesis
 
     
 
