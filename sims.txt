@@ -1,0 +1,10 @@
+Copytrade best trader for last (12,6,3,1) months or (2,1) weeks
+    Criteria:
+        Highest compounded weekly profit
+        Highest average weekly
+        Highest median weekly
+        Prediction interval, highest of lower bound
+Inverse copytrade worse trader "
+
+harder:
+highest profit traders
