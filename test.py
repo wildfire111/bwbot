@@ -1,7 +1,4 @@
 import requests
 
-apikey = 'NHPRBPYDJKFBWHDNIA86HPIMJ1KPPG7AWZ'
-url = f"https://api.arbiscan.io/api?module=block&action=getblocknobytime&timestamp=1601510400&closest=before&apikey={apikey}"
-
-response = requests.post(url)
-print(response.ok)
+list = [1,2,3,4,5,6,7,8,9,10]
+print(list[-1])

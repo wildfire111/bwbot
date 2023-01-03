@@ -1,4 +1,3 @@
-print('running...')
 import sqlite3
 from tqdm import tqdm
 import extractor
