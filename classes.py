@@ -27,11 +27,11 @@ class Transaction:
         tx_hash: str,
     ):
         # Convert collateral type and underlying token from hex to symbol
-        collateral_type = Trade.TOKEN_ADDRESSES.get(collateral_type_hex.lower(), None)
+        collateral_type = Transaction.TOKEN_ADDRESSES.get(collateral_type_hex.lower(), None)
         if not collateral_type:
             raise ValueError("Invalid collateral type.")
 
-        underlying_token = Trade.TOKEN_ADDRESSES.get(underlying_token_hex.lower(), None)
+        underlying_token = Transaction.TOKEN_ADDRESSES.get(underlying_token_hex.lower(), None)
         if not underlying_token:
             raise ValueError("Invalid underlying token.")
 

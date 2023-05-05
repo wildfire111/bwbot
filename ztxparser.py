@@ -1,6 +1,6 @@
 import sqlite3
 from tqdm import tqdm
-import extractor
+import zextractor
 import datetime
 import requests
 import os
