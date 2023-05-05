@@ -1,0 +1,12 @@
+TO DO: Create a trading bot.
+Needs:
+
+Pull transactions from the chain
+Parse those transactions
+Store those transactions in a database.
+
+Read transaction from a database into an transaction object
+create a trader object if it doesn't exist, add that transaction to the trader.
+
+To start, do it just for 6b29
+
