@@ -4,7 +4,8 @@ import os
 import json
 from tqdm import tqdm
 import sqlite3
-from classes import Transaction
+from classes import *
+from tqdm import tqdm
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -21,7 +22,7 @@ def GetCurrentBlock():
     return current_block
 
 def CheckTablesExist():
-    con = sqlite3.connect('transactions.db')
+    con = sqlite3.connect('TransactionList.db')
     cur = con.cursor()
     tables_exist = True
     try:
@@ -34,22 +35,20 @@ def CheckTablesExist():
     return tables_exist
 
 def CreateTables():
-    con = sqlite3.connect('transactions.db')
+    con = sqlite3.connect('TransactionList.db')
     cur = con.cursor()
-    cur.execute('CREATE TABLE tracker (recordedblock Integer)')
     cur.execute('''CREATE TABLE transactions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    account_address TEXT,
-    collateral_type TEXT,
-    underlying_token TEXT,
-    price REAL,
-    collateral_delta REAL,
-    size_delta REAL,
-    fee REAL,
-    is_long INTEGER,
-    block_number INTEGER,
-    tx_hash TEXT
-    );
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        account_address TEXT,
+        collateral_type TEXT,
+        underlying_token TEXT,
+        price REAL,
+        collateral_delta REAL,
+        size_delta REAL,
+        fee REAL,
+        is_long BOOLEAN,
+        block_number INTEGER,
+        tx_hash TEXT
     )''')
     con.commit()
     con.close()
@@ -73,7 +72,7 @@ def GetBlocksByTopic(from_block,to_block,topic):
     return response
 
 def GetAllLogsByTopicInChunks(start_block, topic):
-    CHUNK_SIZE = 100000
+    CHUNK_SIZE = 250000
     MIN_CHUNK_SIZE = 1
     MAX_RETRIES = 5
     current_block = GetCurrentBlock()
@@ -83,7 +82,10 @@ def GetAllLogsByTopicInChunks(start_block, topic):
         raise ValueError("Start block is greater than the current block.")
 
     from_block = start_block
-    while from_block < current_block:
+    total_blocks = current_block - start_block + 1
+    pbar = tqdm(total=total_blocks, desc='Progress', unit='block')
+
+    while from_block <= current_block:
         to_block = min(from_block + CHUNK_SIZE - 1, current_block)
         chunk_size = CHUNK_SIZE
         retries = 0
@@ -91,9 +93,8 @@ def GetAllLogsByTopicInChunks(start_block, topic):
 
         while chunk_size >= MIN_CHUNK_SIZE and retries < MAX_RETRIES:
             response = GetBlocksByTopic(from_block, to_block, topic)
-
-            if response.ok:
-                json_response = response.json()
+            json_response = response.json()
+            if 'error' not in json_response:
                 results = json_response.get('result', [])  # Extract the 'result' list
                 for result in results:
                     address = result.get('address', '')
@@ -101,14 +102,26 @@ def GetAllLogsByTopicInChunks(start_block, topic):
                     # Modify the data field as required
                     data = data[2:]  # Drop the first two characters
                     data = [data[i:i+64] for i in range(0, len(data), 64)]  # Split every 64 characters
-                    account_address = data[1]
-                    collateral_type_hex = data[2]
-                    underlying_token_hex = data[3]
-                    collateral_delta = data[4]
-                    size_delta = data[5]
-                    islongint = int(data[6])
-                    price = data[7]
-                    fee = data[8]
+                    if topic == '0x2e1f85a64a2f22cf2f0c42584e7c919ed4abe8d53675cff0f62bf1e95a1c676f':
+                        account_address = data[1]
+                        collateral_type_hex = data[2]
+                        underlying_token_hex = data[3]
+                        collateral_delta = Web3.toHex(hexstr=float('-inf'))
+                        size_delta = float('-inf')
+                        islongint = int(data[4])
+                        price = 0
+                        fee = 0
+                    else:
+                        account_address = data[1]
+                        collateral_type_hex = data[2]
+                        underlying_token_hex = data[3]
+                        collateral_delta = data[4]
+                        collateral_delta = Web3.toInt(hexstr=collateral_delta)/(10**30)
+                        size_delta = data[5]
+                        size_delta = Web3.toInt(hexstr=size_delta)/(10**30)
+                        islongint = int(data[6])
+                        price = data[7]
+                        fee = data[8]
                     if islongint > 0:
                         is_long = True
                     else:
@@ -126,15 +139,16 @@ def GetAllLogsByTopicInChunks(start_block, topic):
                         Web3.toHex(hexstr=collateral_type_hex[24:]),
                         Web3.toHex(hexstr=underlying_token_hex[24:]),
                         Web3.toInt(hexstr=price)/(10**30),
-                        Web3.toInt(hexstr=collateral_delta)/(10**30),
-                        Web3.toInt(hexstr=size_delta)/(10**30),
+                        collateral_delta,
+                        size_delta,
                         Web3.toInt(hexstr=fee)/(10**30),
                         is_long,
                         result.get('blockNumber', ''),
                         result.get('transactionHash', '')
                     )
-                    print(newtrade)
+                    #print(newtrade)
                     responses.append(newtrade)
+
                 success = True
                 break
             else:
@@ -146,10 +160,13 @@ def GetAllLogsByTopicInChunks(start_block, topic):
             raise RuntimeError("Exceeded maximum retry limit for fetching logs.")
 
         from_block = to_block + 1
+        pbar.update(chunk_size)
 
+    pbar.close()
     return responses
 
-def get_transactions_for_trader(trader_address: str) -> list:
+
+def get_transactions_for_trader_from_db(trader_address: str) -> list:
     # Open the database and retrieve transactions for the specified trader
     conn = sqlite3.connect("TransactionList.db")
     c = conn.cursor()
@@ -166,11 +183,10 @@ def get_transactions_for_trader(trader_address: str) -> list:
     
     return transactions
 
-from typing import List
-
 def transactions_to_trades(transactions: list) -> list:
     trades = []
     open_positions = {}
+    
     for transaction in transactions:
         # Get the key for the open position corresponding to the transaction
         key = (transaction.collateral_type, transaction.underlying_token, transaction.is_long)
@@ -180,12 +196,12 @@ def transactions_to_trades(transactions: list) -> list:
             # If the transaction opens a position, create a new open position
             if key not in open_positions:
                 open_positions[key] = {
-                    'size': transaction.size_delta,
-                    'collateral': transaction.collateral_delta,
+                    'size': max(transaction.size_delta, 0),
+                    'collateral': max(transaction.collateral_delta, 0),
                     'average_open_price': transaction.price
                 }
             else:
-                # If the position is already open, update the position size, collateral and average open price
+                # If the position is already open, update the position size, collateral, and average open price
                 position = open_positions[key]
                 new_size = position['size'] + transaction.size_delta
                 new_collateral = position['collateral'] + transaction.collateral_delta
@@ -193,8 +209,8 @@ def transactions_to_trades(transactions: list) -> list:
                     (position['size'] * position['average_open_price'] +
                      transaction.size_delta * transaction.price) / new_size
                 )
-                position['size'] = new_size
-                position['collateral'] = new_collateral
+                position['size'] = max(new_size, 0)
+                position['collateral'] = max(new_collateral, 0)
                 position['average_open_price'] = new_average_open_price
         else:
             # If the transaction closes a position, calculate the profit and create a new Trade object
@@ -213,6 +229,8 @@ def transactions_to_trades(transactions: list) -> list:
                     # If the position is only partially closed, update the position size and collateral
                     position['size'] -= abs(transaction.size_delta)
                     position['collateral'] -= abs(transaction.collateral_delta)
+                    position['size'] = max(position['size'], 0)
+                    position['collateral'] = max(position['collateral'], 0)
 
     # Close any remaining open positions
     for key in open_positions.keys():
@@ -228,3 +246,31 @@ def transactions_to_trades(transactions: list) -> list:
     trades.sort(key=lambda t: t.start_block)
 
     return trades
+
+def create_full_database():
+    # Check if the database exists
+    if not os.path.exists('TransactionList.db'):
+        # If the database doesn't exist, create the tables
+        CreateTables()
+
+    # Define the topics to fetch logs for
+    topics = ['0x2fe68525253654c21998f35787a8d0f361905ef647c854092430ab65f2f15022', '0x93d75d64d1f84fc6f430a64fc578bdd4c1e090e90ea2d51773e626d19de56d30', '0x2e1f85a64a2f22cf2f0c42584e7c919ed4abe8d53675cff0f62bf1e95a1c676f']
+
+    # Iterate over the topics
+    for topic in topics:
+        # Fetch logs using GetBlocksByTopicInChunks
+        logs = GetAllLogsByTopicInChunks(0, topic)
+
+        # Insert the transactions into the database
+        conn = sqlite3.connect('TransactionList.db')
+        c = conn.cursor()
+
+        with tqdm(total=len(logs), desc=f'Processing topic: {topic}') as pbar:
+            for log in logs:
+                # Insert the transaction into the database
+                query = log.get_sql_query()
+                c.execute(query)
+                pbar.update(1)
+
+        conn.commit()
+        conn.close()
