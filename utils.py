@@ -72,9 +72,11 @@ def GetBlocksByTopic(from_block,to_block,topic):
     return response
 
 def GetAllLogsByTopicInChunks(start_block, topic):
-    CHUNK_SIZE = 250000
-    MIN_CHUNK_SIZE = 1
-    MAX_RETRIES = 5
+    INITIAL_CHUNK_SIZE = 250000
+    CHUNK_INCREMENT_FACTOR = 0.005  # 0.5% increment
+    CHUNK_DECREMENT_FACTOR = 0.10  # 10% decrement
+    MIN_CHUNK_SIZE = 10000
+    MAX_RETRIES = 20
     current_block = GetCurrentBlock()
     responses = []
 
@@ -85,9 +87,10 @@ def GetAllLogsByTopicInChunks(start_block, topic):
     total_blocks = current_block - start_block + 1
     pbar = tqdm(total=total_blocks, desc='Progress', unit='block')
 
+    chunk_size = INITIAL_CHUNK_SIZE
+
     while from_block <= current_block:
-        to_block = min(from_block + CHUNK_SIZE - 1, current_block)
-        chunk_size = CHUNK_SIZE
+        to_block = min(from_block + chunk_size - 1, current_block)
         retries = 0
         success = False
 
@@ -106,8 +109,8 @@ def GetAllLogsByTopicInChunks(start_block, topic):
                         account_address = data[1]
                         collateral_type_hex = data[2]
                         underlying_token_hex = data[3]
-                        collateral_delta = Web3.toHex(hexstr=float('-inf'))
-                        size_delta = float('-inf')
+                        collateral_delta = -1e300
+                        size_delta = -1e300
                         islongint = int(data[4])
                         price = 0
                         fee = 0
@@ -121,11 +124,17 @@ def GetAllLogsByTopicInChunks(start_block, topic):
                         size_delta = Web3.toInt(hexstr=size_delta)/(10**30)
                         islongint = int(data[6])
                         price = data[7]
+                        price = Web3.toInt(hexstr=price)/(10**30)
                         fee = data[8]
+                        fee = Web3.toInt(hexstr=fee)/(10**30)
                     if islongint > 0:
                         is_long = True
                     else:
                         is_long = False
+                    #if position decrease
+                    if topic == '0x93d75d64d1f84fc6f430a64fc578bdd4c1e090e90ea2d51773e626d19de56d30':
+                        size_delta *= -1
+                        collateral_delta *= -1
                     """ print('accadd: '+str(Web3.toHex(hexstr=account_address[24:])))
                     print('collat: '+str(Web3.toHex(hexstr=collateral_type_hex[24:])))
                     print('underlying: '+str(Web3.toHex(hexstr=underlying_token_hex[24:])))
@@ -138,10 +147,10 @@ def GetAllLogsByTopicInChunks(start_block, topic):
                         Web3.toHex(hexstr=account_address[24:]),
                         Web3.toHex(hexstr=collateral_type_hex[24:]),
                         Web3.toHex(hexstr=underlying_token_hex[24:]),
-                        Web3.toInt(hexstr=price)/(10**30),
+                        price,
                         collateral_delta,
                         size_delta,
-                        Web3.toInt(hexstr=fee)/(10**30),
+                        fee,
                         is_long,
                         result.get('blockNumber', ''),
                         result.get('transactionHash', '')
@@ -150,9 +159,10 @@ def GetAllLogsByTopicInChunks(start_block, topic):
                     responses.append(newtrade)
 
                 success = True
+                chunk_size = chunk_size + int(chunk_size * CHUNK_INCREMENT_FACTOR)
                 break
             else:
-                chunk_size //= 2
+                chunk_size = max(int(chunk_size - chunk_size * CHUNK_DECREMENT_FACTOR), MIN_CHUNK_SIZE)
                 to_block = min(from_block + chunk_size - 1, current_block)
                 retries += 1
 
@@ -177,75 +187,86 @@ def get_transactions_for_trader_from_db(trader_address: str) -> list:
     # Create Transaction objects for each row and sort by block number
     transactions = []
     for row in rows:
-        transaction = Transaction(*row)
+        transaction = Transaction(row[1],row[2],row[3],row[4],row[5],row[6],row[7],row[8],row[9],row[10])
         transactions.append(transaction)
     transactions.sort(key=lambda t: t.block_number)
     
     return transactions
 
 def transactions_to_trades(transactions: list) -> list:
-    trades = []
-    open_positions = {}
+    trades = []  # List to store the resulting trades
+    open_positions = {}  # Dictionary to track open positions
+    
+    # Sort the transactions based on the block number
+    transactions.sort(key=lambda t: t.block_number)
     
     for transaction in transactions:
-        # Get the key for the open position corresponding to the transaction
-        key = (transaction.collateral_type, transaction.underlying_token, transaction.is_long)
-
-        # Check if the transaction opens or closes a position
-        if transaction.size_delta > 0:
-            # If the transaction opens a position, create a new open position
-            if key not in open_positions:
+        key = (transaction.underlying_token, transaction.is_long)
+        
+        if transaction.size_delta > 0:  # Opening a new position
+            if key not in open_positions:  # If position doesn't exist, create a new one
                 open_positions[key] = {
-                    'size': max(transaction.size_delta, 0),
-                    'collateral': max(transaction.collateral_delta, 0),
+                    'size_dollars': max(transaction.size_delta, 0),
+                    'collateral_value': max(transaction.collateral_delta, 0),
                     'average_open_price': transaction.price
                 }
-            else:
-                # If the position is already open, update the position size, collateral, and average open price
+            else:  # Position already exists, update the position
                 position = open_positions[key]
-                new_size = position['size'] + transaction.size_delta
-                new_collateral = position['collateral'] + transaction.collateral_delta
-                new_average_open_price = (
-                    (position['size'] * position['average_open_price'] +
-                     transaction.size_delta * transaction.price) / new_size
-                )
-                position['size'] = max(new_size, 0)
-                position['collateral'] = max(new_collateral, 0)
+                new_size_dollars = position['size_dollars'] + transaction.size_delta
+                new_collateral_value = position['collateral_value'] + transaction.collateral_delta
+                current_units = position['size']/position['average_open_price']
+                added_units = transaction.size_delta/transaction.price
+                new_average_open_price = (position['size']+transaction.size_delta)/(current_units+added_units)
+                position['size_dollars'] = max(new_size_dollars, 0)
+                position['collateral_value'] = max(new_collateral_value, 0)
                 position['average_open_price'] = new_average_open_price
-        else:
-            # If the transaction closes a position, calculate the profit and create a new Trade object
-            if key in open_positions:
+        else:  # Closing a position
+            if key in open_positions:  # If position exists, close it
                 position = open_positions[key]
-                if abs(transaction.size_delta) >= position['size']:
-                    # If the position is fully closed, calculate the profit and remove the position
+                if abs(transaction.size_delta) >= position['size_dollars']:
+                    # Generate a trade for the closed position
                     end_price = transaction.price
                     start_price = position['average_open_price']
-                    size = position['size']
-                    collateral = position['collateral']
-                    trade = Trade(start_price, end_price, size, collateral)
+                    size_dollars = position['size_dollars']
+                    collateral_value = position['collateral_value']
+                    trade = Trade(transaction.block_number, start_price, end_price, size_dollars, collateral_value)
                     trades.append(trade)
-                    del open_positions[key]
-                else:
-                    # If the position is only partially closed, update the position size and collateral
-                    position['size'] -= abs(transaction.size_delta)
-                    position['collateral'] -= abs(transaction.collateral_delta)
-                    position['size'] = max(position['size'], 0)
-                    position['collateral'] = max(position['collateral'], 0)
-
-    # Close any remaining open positions
+                    del open_positions[key]  # Remove the closed position from the dictionary
+                else:  # Update the open position and generate a trade for the closed part
+                    closed_size_dollars = abs(transaction.size_delta)
+                    closed_collateral_value = abs(transaction.collateral_delta)
+                    position['size_dollars'] -= closed_size_dollars
+                    position['collateral_value'] -= closed_collateral_value
+                    start_price = position['average_open_price']
+                    end_price = transaction.price
+                    size_dollars = closed_size_dollars
+                    collateral_value = closed_collateral_value
+                    trade = Trade(transaction.block_number, start_price, end_price, size_dollars, collateral_value)
+                    trades.append(trade)
+    
+    # Generate trades for the remaining open positions
     for key in open_positions.keys():
         position = open_positions[key]
-        end_price = transactions[-1].price
+        end_price = None
+        search_block = transactions[-1].block_number
+        while end_price is None:
+            if search_block < 0:
+                raise ValueError("Invalid search block. No transaction found.")
+            end_price = get_transaction_price(key[0],search_block)
+            search_block -= 1
         start_price = position['average_open_price']
-        size = position['size']
-        collateral = position['collateral']
-        trade = Trade(start_price, end_price, size, collateral)
+        size_dollars = position['size_dollars']
+        collateral_value = position['collateral_value']
+        trade = Trade(transactions[-1].block_number, start_price, end_price, size_dollars, collateral_value)
         trades.append(trade)
-
-    # Sort trades by the block number of the first transaction
-    trades.sort(key=lambda t: t.start_block)
-
+    
+    # Sort the trades based on the finalized block number
+    trades.sort(key=lambda t: t.finalized_block)
+    
     return trades
+
+
+
 
 def create_full_database():
     # Check if the database exists
@@ -274,3 +295,58 @@ def create_full_database():
 
         conn.commit()
         conn.close()
+        
+import sqlite3
+
+def get_transaction_price(block_number, underlying_token):
+    # Establish a connection to your SQLite database
+    conn = sqlite3.connect('TransactionList.db')
+    cursor = conn.cursor()
+
+    # Write your SQLite query to retrieve the price based on block number and underlying token
+    query = f"""
+        SELECT price
+        FROM transactions
+        WHERE block_number = {block_number} AND underlying_token = \"{underlying_token}\"
+    """
+
+    # Execute the query and fetch the result
+    cursor.execute(query)
+    result = cursor.fetchone()
+
+    # Close the database connection
+    conn.close()
+
+    # Check if a result is found and return the price
+    if result is not None:
+        return result[0]  # Assuming the price is stored in the first column of the result
+    else:
+        return None  # Return None if no matching transaction is found
+
+def HumanParse(transactions):
+    sorted_transactions = sorted(transactions, key=lambda t: t.block_number)
+    for transaction in sorted_transactions:
+        underlying_token = transaction.underlying_token
+        collateral_delta = transaction.collateral_delta
+        size_delta = transaction.size_delta
+        is_long = transaction.is_long
+        
+        if size_delta < 0 and abs(size_delta) > 1e299:
+            # Liquidation
+            print(f"Liquidated {'long' if is_long else 'short'} on {underlying_token}.")
+        elif size_delta > 0:
+            position_type = "long" if is_long else "short"
+            position_size = abs(size_delta)
+            leverage = size_delta / collateral_delta if collateral_delta != 0 else 0
+
+            print(f"Increased {position_type} on {underlying_token}. Position size increased by ${position_size:.2f}. Leverage: {leverage:.2f}x.")
+        elif size_delta < 0:
+            position_type = "long" if is_long else "short"
+            position_size = abs(size_delta)
+            leverage = size_delta / collateral_delta if collateral_delta != 0 else 0
+
+            print(f"Decreased {position_type} on {underlying_token}. Position size decreased by ${position_size:.2f}. Leverage: {leverage:.2f}x.")
+        else:
+            collateral_change = collateral_delta
+            change_message = "increased" if collateral_change > 0 else "decreased"
+            print(f"Changed collateral on {underlying_token}. Collateral {change_message} by ${abs(collateral_change):.2f}.")

@@ -12,6 +12,16 @@ class Transaction:
         '0x9d2f299715d94d8a7e6f5eaa8e654e8c74a988a7': 'FXS',
         '0x17fc002b466eec40dae837fc4be5c67993ddbd6f': 'FRAX',
         '0xfea7a6a0b346362bf88a9e4a88416b77a57d6c2a': 'MIM',
+        'weth': 'WETH',
+        'dai': 'DAI',
+        'usdc': 'USDC',
+        'usdt': 'USDT',
+        'wbtc': 'WBTC',
+        'uni': 'UNI',
+        'link': 'LINK',
+        'fxs': 'FXS',
+        'frax': 'FRAX',
+        'mim': 'MIM',
     }
 
     def __init__(self, account_address, collateral_type_hex, underlying_token_hex, price, collateral_delta, size_delta, fee, is_long, block_number, tx_hash):
@@ -40,7 +50,7 @@ class Transaction:
         # Define the SQL statement for inserting a new transaction
         add_transaction = ("INSERT INTO transactions "
                             "(account_address, collateral_type, underlying_token, price, collateral_delta, size_delta, fee, is_long, block_number, tx_hash) "
-                            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)")
+                            "VALUES (\"%s\", \"%s\", \"%s\", %s, %s, %s, %s, %s, %s, \"%s\")")
 
         # Generate the SQL query with the transaction data
         transaction_data = (self.account_address, self.collateral_type, self.underlying_token, self.price, self.collateral_delta,
