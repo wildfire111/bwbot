@@ -354,15 +354,9 @@ import sqlite3
 
 import sqlite3
 
-def get_traders():
+def get_traders(query):
     # Connect to the SQLite database
-    conn = sqlite3.connect('TransactionList.db')
-    cursor = conn.cursor()
-
-    # Get all account names from the database
-    cursor.execute("SELECT DISTINCT account_address FROM transactions")
-    account_names = cursor.fetchall()
-
+    account_names = sql_query(query)
     traders = []
     for account_name in account_names:
         # Get transactions for the current account name from the database
@@ -385,3 +379,10 @@ def get_traders():
 
     return traders
 
+def sql_query(sql_query):
+    conn = sqlite3.connect('TransactionList.db')
+    cur = conn.cursor()
+    cur.execute(sql_query)
+    rows = cur.fetchall()
+    conn.close()
+    return rows
