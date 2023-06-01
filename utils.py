@@ -73,7 +73,7 @@ def GetBlocksByTopic(from_block,to_block,topic):
 
 def GetAllLogsByTopicInChunks(start_block, topic):
     INITIAL_CHUNK_SIZE = 250000
-    CHUNK_INCREMENT_FACTOR = 0.005  # 0.5% increment
+    CHUNK_INCREMENT_FACTOR = 0.01  # 1% increment
     CHUNK_DECREMENT_FACTOR = 0.10  # 10% decrement
     MIN_CHUNK_SIZE = 10000
     MAX_RETRIES = 20
@@ -112,7 +112,8 @@ def GetAllLogsByTopicInChunks(start_block, topic):
                         collateral_delta = -1e300
                         size_delta = -1e300
                         islongint = int(data[4])
-                        price = 0
+                        price = data[9]
+                        price = Web3.toInt(hexstr=price)/(10**30)
                         fee = 0
                     else:
                         account_address = data[1]
@@ -214,9 +215,9 @@ def transactions_to_trades(transactions: list) -> list:
                 position = open_positions[key]
                 new_size_dollars = position['size_dollars'] + transaction.size_delta
                 new_collateral_value = position['collateral_value'] + transaction.collateral_delta
-                current_units = position['size']/position['average_open_price']
+                current_units = position['size_dollars']/position['average_open_price']
                 added_units = transaction.size_delta/transaction.price
-                new_average_open_price = (position['size']+transaction.size_delta)/(current_units+added_units)
+                new_average_open_price = (position['size_dollars']+transaction.size_delta)/(current_units+added_units)
                 position['size_dollars'] = max(new_size_dollars, 0)
                 position['collateral_value'] = max(new_collateral_value, 0)
                 position['average_open_price'] = new_average_open_price
@@ -240,7 +241,7 @@ def transactions_to_trades(transactions: list) -> list:
                     start_price = position['average_open_price']
                     end_price = transaction.price
                     size_dollars = closed_size_dollars
-                    collateral_value = closed_collateral_value
+                    collateral_value = position['collateral_value']
                     trade = Trade(transaction.block_number, start_price, end_price, size_dollars, collateral_value)
                     trades.append(trade)
     
@@ -295,8 +296,6 @@ def create_full_database():
 
         conn.commit()
         conn.close()
-        
-import sqlite3
 
 def get_transaction_price(block_number, underlying_token):
     # Establish a connection to your SQLite database
@@ -350,3 +349,39 @@ def HumanParse(transactions):
             collateral_change = collateral_delta
             change_message = "increased" if collateral_change > 0 else "decreased"
             print(f"Changed collateral on {underlying_token}. Collateral {change_message} by ${abs(collateral_change):.2f}.")
+
+import sqlite3
+
+import sqlite3
+
+def get_traders():
+    # Connect to the SQLite database
+    conn = sqlite3.connect('TransactionList.db')
+    cursor = conn.cursor()
+
+    # Get all account names from the database
+    cursor.execute("SELECT DISTINCT account_address FROM transactions")
+    account_names = cursor.fetchall()
+
+    traders = []
+    for account_name in account_names:
+        # Get transactions for the current account name from the database
+        transactions = get_transactions_for_trader_from_db(account_name[0])
+
+        # Create Trade objects from the transactions
+        trades = transactions_to_trades(transactions)
+
+        # Create a Trader object and attach the trades
+        trader = Trader(account_name[0], trades)
+
+        # Append the Trader object to the list of traders
+        traders.append(trader)
+
+    # Sort the list of traders by the profitable trades percentage
+    traders.sort(key=lambda t: t.get_profitable_trades_percentage(), reverse=True)
+
+    # Close the database connection
+    conn.close()
+
+    return traders
+

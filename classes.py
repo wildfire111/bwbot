@@ -93,7 +93,7 @@ class Trade:
         return (self.get_profit() / self.collateral) * 100
     
     def __str__(self):
-        return f"Trade: finalized_block={self.finalized_block}, start_price={self.start_price}, end_price={self.end_price}, size_in_dollars={self.size_in_dollars}, collateral={self.collateral}"
+        return f"Trade: Profit = {self.get_profit_percentage():.2f}%, Start Price = {self.start_price:.2f}, End Price = {self.end_price:.2f}, Size = {self.size_in_dollars:.2f}, Collateral = {self.collateral:.2f}, Finalized_block={self.finalized_block}"
 
 
 
@@ -118,15 +118,6 @@ class Trader:
         profitable_trades = [trade for trade in self.trades if trade.get_profit() > 0]
         return (len(profitable_trades) / len(self.trades)) * 100
     
-    def get_maximum_drawdown(self):
-        drawdowns = []
-        peak = self.trades[0].end_price
-        for trade in self.trades:
-            if trade.end_price > peak:
-                peak = trade.end_price
-            drawdowns.append(peak - trade.end_price)
-        max_drawdown = max(drawdowns)
-        return max_drawdown
     
     def get_sharpe_ratio(self, risk_free_rate):
         total_profit = self.get_total_profit()
