@@ -3,4 +3,3 @@
 *.db-journal
 test.py
 .venv/
-poetry.lock
