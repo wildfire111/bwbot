@@ -21,6 +21,24 @@ def GetCurrentBlock():
     #print(f"Current block: {current_block}")
     return current_block
 
+def getblockbytime(timestamp):
+    arbiapi = os.getenv('ARBISCANAPIKEY')
+    arbiurl = f'https://api.arbiscan.io/api?module=block&action=getblocknobytime&timestamp={timestamp}&closest=before&apikey={arbiapi}'
+    response = requests.post(arbiurl)
+    if response.json()['status'] != 0:
+        return response.json()['result']
+    else:
+        print('error in getting block by time')
+        return(False)
+
+def gettimebyblock(block):
+    block = Web3.toHex(block)
+    payload = {"jsonrpc": "2.0", "id": 0, "method": "eth_getBlockByNumber", "params": [block,False]}
+    headers = {"Accept": "application/json","Content-Type": "application/json"}
+    response = requests.post(alchurl, json=payload, headers=headers)
+    respdict = response.json()
+    return Web3.toInt(hexstr=respdict['result']['timestamp'])
+
 def CheckTablesExist():
     con = sqlite3.connect('TransactionList.db')
     cur = con.cursor()
@@ -349,10 +367,6 @@ def HumanParse(transactions):
             collateral_change = collateral_delta
             change_message = "increased" if collateral_change > 0 else "decreased"
             print(f"Changed collateral on {underlying_token}. Collateral {change_message} by ${abs(collateral_change):.2f}.")
-
-import sqlite3
-
-import sqlite3
 
 def get_traders(query):
     # Connect to the SQLite database

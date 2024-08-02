@@ -2,23 +2,23 @@ from classes import *
 import json
 from utils import *
 import sqlite3
-#create_full_database()
-query = f'''SELECT account_address 
-    FROM 
-        (SELECT account_address, COUNT(*) AS total_transactions
-        FROM transactions
-        GROUP BY account_address
-        HAVING COUNT(*) >= 100
-        ) AS t1
-    WHERE account_address IN (
-        SELECT account_address
-        FROM transactions
-        WHERE block_number > {GetCurrentBlock()-10000000}
-        GROUP BY account_address
-        HAVING COUNT(*) >= 10
-);'''
-traders = get_traders(query)
-print(traders[0].get_profitable_trades_percentage())
+create_full_database()
+# query = f'''SELECT account_address 
+#     FROM 
+#         (SELECT account_address, COUNT(*) AS total_transactions
+#         FROM transactions
+#         GROUP BY account_address
+#         HAVING COUNT(*) >= 100
+#         ) AS t1
+#     WHERE account_address IN (
+#         SELECT account_address
+#         FROM transactions
+#         WHERE block_number > {GetCurrentBlock()-10000000}
+#         GROUP BY account_address
+#         HAVING COUNT(*) >= 10
+# );'''
+# traders = get_traders(query)
+# print(traders[0].get_profitable_trades_percentage())
     
 #transactions = get_transactions_for_trader_from_db('0xd1c1d7ade57144f0b7bfad2aaf3e99d26fa89b29')
 #trades = transactions_to_trades(transactions)
