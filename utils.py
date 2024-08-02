@@ -17,7 +17,7 @@ def GetCurrentBlock():
     headers = {"Accept": "application/json","Content-Type": "application/json"}
     response = requests.post(url, json=payload, headers=headers)
     respdict = response.json()
-    current_block = Web3.toInt(hexstr=respdict['result'])
+    current_block = Web3.to_int(hexstr=respdict['result'])
     #print(f"Current block: {current_block}")
     return current_block
 
@@ -32,12 +32,12 @@ def getblockbytime(timestamp):
         return(False)
 
 def gettimebyblock(block):
-    block = Web3.toHex(block)
+    block = Web3.to_hex(block)
     payload = {"jsonrpc": "2.0", "id": 0, "method": "eth_getBlockByNumber", "params": [block,False]}
     headers = {"Accept": "application/json","Content-Type": "application/json"}
     response = requests.post(alchurl, json=payload, headers=headers)
     respdict = response.json()
-    return Web3.toInt(hexstr=respdict['result']['timestamp'])
+    return Web3.to_int(hexstr=respdict['result']['timestamp'])
 
 def CheckTablesExist():
     con = sqlite3.connect('TransactionList.db')
@@ -78,8 +78,8 @@ def GetBlocksByTopic(from_block,to_block,topic):
         "method": "eth_getLogs",
         "params": [
             {
-            "fromBlock": Web3.toHex(from_block),
-            "toBlock": Web3.toHex(to_block),
+            "fromBlock": Web3.to_hex(from_block),
+            "toBlock": Web3.to_hex(to_block),
             "address": "0x489ee077994B6658eAfA855C308275EAd8097C4A",
             "topics": [topic]
             }
@@ -131,21 +131,21 @@ def GetAllLogsByTopicInChunks(start_block, topic):
                         size_delta = -1e300
                         islongint = int(data[4])
                         price = data[9]
-                        price = Web3.toInt(hexstr=price)/(10**30)
+                        price = Web3.to_int(hexstr=price)/(10**30)
                         fee = 0
                     else:
                         account_address = data[1]
                         collateral_type_hex = data[2]
                         underlying_token_hex = data[3]
                         collateral_delta = data[4]
-                        collateral_delta = Web3.toInt(hexstr=collateral_delta)/(10**30)
+                        collateral_delta = Web3.to_int(hexstr=collateral_delta)/(10**30)
                         size_delta = data[5]
-                        size_delta = Web3.toInt(hexstr=size_delta)/(10**30)
+                        size_delta = Web3.to_int(hexstr=size_delta)/(10**30)
                         islongint = int(data[6])
                         price = data[7]
-                        price = Web3.toInt(hexstr=price)/(10**30)
+                        price = Web3.to_int(hexstr=price)/(10**30)
                         fee = data[8]
-                        fee = Web3.toInt(hexstr=fee)/(10**30)
+                        fee = Web3.to_int(hexstr=fee)/(10**30)
                     if islongint > 0:
                         is_long = True
                     else:
@@ -154,18 +154,18 @@ def GetAllLogsByTopicInChunks(start_block, topic):
                     if topic == '0x93d75d64d1f84fc6f430a64fc578bdd4c1e090e90ea2d51773e626d19de56d30':
                         size_delta *= -1
                         collateral_delta *= -1
-                    """ print('accadd: '+str(Web3.toHex(hexstr=account_address[24:])))
-                    print('collat: '+str(Web3.toHex(hexstr=collateral_type_hex[24:])))
-                    print('underlying: '+str(Web3.toHex(hexstr=underlying_token_hex[24:])))
-                    print('price: '+str(Web3.toInt(hexstr=price)/(10**30)))
-                    print('collat_delta: '+str(Web3.toInt(hexstr=collateral_delta)/(10**30)))
-                    print('size_delta: '+str(Web3.toInt(hexstr=size_delta)/(10**30)))
-                    print('fee: '+str(Web3.toInt(hexstr=fee)/(10**30)))
+                    """ print('accadd: '+str(Web3.to_hex(hexstr=account_address[24:])))
+                    print('collat: '+str(Web3.to_hex(hexstr=collateral_type_hex[24:])))
+                    print('underlying: '+str(Web3.to_hex(hexstr=underlying_token_hex[24:])))
+                    print('price: '+str(Web3.to_int(hexstr=price)/(10**30)))
+                    print('collat_delta: '+str(Web3.to_int(hexstr=collateral_delta)/(10**30)))
+                    print('size_delta: '+str(Web3.to_int(hexstr=size_delta)/(10**30)))
+                    print('fee: '+str(Web3.to_int(hexstr=fee)/(10**30)))
                     print('is_long: '+str(is_long)) """
                     newtrade = Transaction(
-                        Web3.toHex(hexstr=account_address[24:]),
-                        Web3.toHex(hexstr=collateral_type_hex[24:]),
-                        Web3.toHex(hexstr=underlying_token_hex[24:]),
+                        Web3.to_hex(hexstr=account_address[24:]),
+                        Web3.to_hex(hexstr=collateral_type_hex[24:]),
+                        Web3.to_hex(hexstr=underlying_token_hex[24:]),
                         price,
                         collateral_delta,
                         size_delta,
