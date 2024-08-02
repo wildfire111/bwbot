@@ -3,3 +3,4 @@
 *.db-journal
 test.py
 .venv/
+.pyc
